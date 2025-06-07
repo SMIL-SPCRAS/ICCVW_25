@@ -21,8 +21,8 @@
 
 ### Qwen2.5-VL-3B-Instruct
 
-- [Train_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/train_segment_with_text.csv)
-- [Dev_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/dev_segment_with_text.csv)
+- [Train_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/train_segment_with_text_1.csv)
+- [Dev_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/dev_segment_with_text_1.csv)
 
 ## AffWild2
 
