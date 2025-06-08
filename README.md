@@ -29,7 +29,7 @@
 ### Qwen2.5-VL-3B-Instruct
 
 - Train_1
-- Dev_1
+- [Dev_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-3B-Instruct/dev_segment_with_text_1.csv)
 
 ## C-EXPR-DB
 
