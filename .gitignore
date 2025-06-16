@@ -169,3 +169,8 @@ dmypy.json
 
 # Custom
 *.pdf
+corpora/
+main/
+sbatch/
+utils/
+out/
