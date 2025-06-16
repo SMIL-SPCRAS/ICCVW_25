@@ -45,7 +45,7 @@
 
 - [Train_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/train_segment_with_text_1.csv)
 - [Dev_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/dev_segment_with_text_1.csv)
-- Train_2
+- [Train_2](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/train_segment_with_text_2.csv)
 - [Dev_2](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AFEW/Qwen2.5-VL-3B-Instruct/dev_segment_with_text_2.csv)
 
 ### Qwen2.5-VL-7B-Instruct
