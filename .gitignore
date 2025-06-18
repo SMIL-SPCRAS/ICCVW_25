@@ -169,3 +169,6 @@ dmypy.json
 
 # Custom
 *.pdf
+
+# Configuration files
+*.yaml
