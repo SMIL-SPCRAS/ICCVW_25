@@ -26,6 +26,7 @@ class AudioEmotionDataset(Dataset):
         self.emotion_labels = emotion_labels
         self.sample_rate = sample_rate
         self.num_samples = int(max_length * sample_rate)
+        self.df = self.df.head(10)
 
     def __len__(self) -> int:
         return len(self.df)

@@ -4,12 +4,12 @@ import pandas as pd
 import torch
 from collections import defaultdict
 from tqdm import tqdm
-from torch.utils.tensorboard import SummaryWriter
-import wandb
 from typing import Dict, List, Any, Optional
 
 from audio.trainer.loss_manager import LossManager
 from audio.trainer.evaluator import Evaluator
+from audio.utils.mlflow_logger import MLflowLogger
+
 
 class Trainer:
     """
@@ -27,7 +27,7 @@ class Trainer:
         log_dir: str,
         checkpoint_dir: str,
         final_activations: Dict[str, Any],
-        use_wandb: bool = False
+        ml_logger: MLflowLogger = None
     ):
         self.model = model
         self.optimizer = optimizer
@@ -39,10 +39,7 @@ class Trainer:
         self.log_dir = log_dir
         self.checkpoint_dir = checkpoint_dir
         self.final_activations = final_activations
-        self.writer = SummaryWriter(log_dir=log_dir)
-        self.use_wandb = use_wandb and wandb is not None
-        if self.use_wandb:
-            wandb.watch(self.model, log='all')
+        self.ml_logger = ml_logger
 
         self.history = defaultdict(dict)
 
@@ -77,7 +74,7 @@ class Trainer:
                 loss_tracker.update({task: val.item()}, batch_size)
 
             for i, db in enumerate(metas["db"]):
-                for task in outputs:
+                for task in self.final_activations:
                     pred = self.final_activations[task](outputs[task][i].unsqueeze(0))
                     all_predicts[db][task].append(pred.detach().cpu().numpy()[0])
                     all_targets[db][task].append(labels[task][i].detach().cpu().numpy())
@@ -87,22 +84,22 @@ class Trainer:
         mean_losses = loss_tracker.compute()
         total_loss = sum(mean_losses.values())
         self.writer.add_scalar(f'{phase}/loss', total_loss, epoch)
-        if self.use_wandb:
-            wandb.log({f"{phase}_loss": total_loss, "epoch": epoch})
+        if self.ml_logger:
+            self.ml_logger.log_metrics({f"{phase}_loss": total_loss}, step=epoch)
 
         for task, value in mean_losses.items():
             self.writer.add_scalar(f"{phase}/loss_{task}", value, epoch)
-            if self.use_wandb:
-                wandb.log({f"{phase}_loss_{task}": value, "epoch": epoch})
+            if self.ml_logger:
+                self.ml_logger.log_metrics({f"{phase}_loss_{task}": value}, step=epoch)
 
         lr = self.optimizer.param_groups[0]['lr']
         self.writer.add_scalar(f'{phase}/learning_rate', lr, epoch)
-        if self.use_wandb:
-            wandb.log({f"{phase}_lr": lr, "epoch": epoch})
+        if self.ml_logger:
+            self.ml_logger.log_metrics({f"{phase}_lr": lr}, step=epoch)
 
         self.logger.info("=" * 80)
-        loss_str = " | ".join([f"{task} Loss={mean_losses[task]:.3f}" for task in mean_losses])
-        self.logger.info(f"[Epoch {epoch}] {'🔁' if is_train else '🔍'} {phase.upper()}: Total Loss={total_loss:.3f} | {loss_str}")
+        loss_str = " | ".join([f"{task} Loss = {mean_losses[task]:.3f}" for task in mean_losses])
+        self.logger.info(f"[Epoch {epoch}] {'🔁' if is_train else '🔍'} {phase.upper()}: Total Loss = {total_loss:.3f} | {loss_str}")
 
         self.history[epoch][f"{phase}_loss"] = total_loss
         self.history[epoch][f"{phase}_lr"] = lr
@@ -112,17 +109,23 @@ class Trainer:
     def train_epoch(self, dataloader, epoch: int) -> Dict[str, Any]:
         return self._run_epoch(dataloader, epoch, 'train')
 
-    def validate_epoch(self, dataloader, epoch: int, evaluator: Optional[Evaluator] = None) -> Dict[str, Any]:
-        result = self._run_epoch(dataloader, epoch, 'val')
-
+    def validate_epoch(self, dataloader, epoch: int, evaluator: Optional[Evaluator] = None, phase_name: Optional[str] = 'val') -> Dict[str, Any]:
+        result = self._run_epoch(dataloader, epoch, phase_name)
+        result["metrics"] = {}
+        
         if evaluator is not None:
             for db in result["predicts"]:
                 targets_db = {task: result["targets"][db][task] for task in result["targets"][db]}
                 predicts_db = {task: result["predicts"][db][task] for task in result["predicts"][db]}
-                metrics_result = evaluator.evaluate(targets_db, predicts_db, epoch, phase=f"val_{db}")
-                evaluator.draw_confusion_matrix(targets_db, predicts_db, "emo", epoch, "val", is_best=True)
+                metrics_result = evaluator.evaluate(targets_db, predicts_db, epoch, phase=f"{phase_name}_{db}")
+                
+                result["metrics"][db] = metrics_result
+                
+                for task in predicts_db:
+                    evaluator.draw_confusion_matrix(targets_db, predicts_db, db, task, epoch, phase_name)
+                
                 for k, v in metrics_result.items():
-                    self.history[epoch][f"val_{db}_{k}"] = v
+                    self.history[epoch][f"{phase_name}_{db}_{k}"] = v
                 
         return result
 
@@ -159,6 +162,9 @@ class Trainer:
             torch.save(state, os.path.join(self.checkpoint_dir, "best_model.pt"))
         else:
             torch.save(state, os.path.join(self.checkpoint_dir, f"checkpoint_epoch_{epoch}.pt"))
+
+        if self.ml_logger:
+            self.ml_logger.log_artifact(os.path.join(self.checkpoint_dir, "best_model.pt"))
 
     def load_checkpoint(self, path: str) -> Dict[str, Any]:
         checkpoint = torch.load(path, map_location=self.device)

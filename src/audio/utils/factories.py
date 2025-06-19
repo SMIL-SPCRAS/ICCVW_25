@@ -1,8 +1,9 @@
 import os
 from typing import Dict, Any, List
+from collections import defaultdict
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 
 from audio.data.dataloaders import AudioEmotionDataset
 from audio.utils.metrics import MacroF1, UAR
@@ -17,7 +18,7 @@ def create_dataloaders(cfg):
     Returns:
         Dict[str, DataLoader]: Dataloaders for each phase.
     """
-    datasets = {}
+    datasets = defaultdict(list)
 
     for db_name, subsets in cfg["databases"].items():
         for subset, metadata_filename in subsets.items():
@@ -31,9 +32,18 @@ def create_dataloaders(cfg):
                 max_length=cfg["max_length"],
             )
 
-            datasets[subset] = dataset
+            datasets[subset].append(dataset)
 
-    dataloaders = {subset: DataLoader(dataset, batch_size=cfg["batch_size"], shuffle=(subset=="train"), num_workers=cfg["num_workers"]) for subset, dataset in datasets.items()}
+    dataloaders = {
+       subset: DataLoader(
+            ConcatDataset(ds_list),
+            batch_size=cfg["batch_size"],
+            shuffle=(subset == "train"),
+            num_workers=cfg["num_workers"]
+        )
+        for subset, ds_list in datasets.items()
+    }
+    
     return dataloaders
 
 

@@ -1,14 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
 
-
-def conf_matrix(targets, predicts, labels):
-    """
-    Compute confusion matrix.
-    """
-    return confusion_matrix(targets, predicts, labels=labels)
+import torch
 
 
 def plot_conf_matrix(cm, labels, title, save_path=None, normalize=False, figsize=(8, 6), xticks_rotation=45):
@@ -46,5 +40,34 @@ def plot_conf_matrix(cm, labels, title, save_path=None, normalize=False, figsize
     plt.tight_layout()
     if save_path:
         fig.savefig(save_path)
+    
     plt.close(fig)
     return fig
+
+
+def visualize_uncertainty(logvars: torch.Tensor, emotion_labels=None, save_path=None):
+    """
+    Visualize log-variance (uncertainty) as a heatmap for emotion predictions using seaborn.
+
+    Args:
+        logvars (torch.Tensor): Log-variance tensor of shape (batch_size, num_emotions)
+        emotion_labels (List[str], optional): List of emotion labels.
+        save_path (str, optional): If provided, saves the figure to this path.
+    """
+    logvars = logvars.detach().cpu().numpy()
+    batch_size, num_emotions = logvars.shape
+
+    plt.figure(figsize=(num_emotions, batch_size * 0.5))
+    ax = sns.heatmap(logvars, cmap="viridis", cbar=True, xticklabels=emotion_labels, yticklabels=False)
+    ax.set_title("Emotion Prediction Uncertainty (logvar)")
+    ax.set_xlabel("Emotions")
+    ax.set_ylabel("Samples")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+    else:
+        plt.show()
+    
+    plt.close()

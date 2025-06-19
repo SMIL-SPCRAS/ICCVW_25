@@ -10,13 +10,13 @@ import mlflow
 sys.path.append('src')
 
 from audio.utils.factories import create_dataloaders, create_scheduler, create_metrics
-from audio.models.models import WavLMEmotionClassifierV4
+from audio.models.uncertainty_aware_model import WavLMEmotionClassifier
 from audio.trainer.trainer import Trainer
 from audio.trainer.early_stopping import EarlyStopping
 from audio.trainer.metric_manager import MetricManager
 from audio.trainer.evaluator import Evaluator
 from audio.utils.utils import load_config, define_seed
-from audio.utils.loss import SoftCrossEntropyLoss
+from audio.utils.loss import EmotionNLLLoss
 from audio.utils.mlflow_logger import MLflowLogger
 
 
@@ -76,7 +76,7 @@ def main(cfg: dict, debug: bool = False):
 
     dataloaders = create_dataloaders(cfg)
 
-    model = WavLMEmotionClassifierV4(
+    model = WavLMEmotionClassifier(
         pretrained_model_name=cfg["pretrained_model"],
         num_emotions=len(cfg["emotion_labels"])
     ).to(torch.device(cfg["device"]))
@@ -85,7 +85,7 @@ def main(cfg: dict, debug: bool = False):
     scheduler = create_scheduler(cfg, optimizer)
 
     class_weights = compute_class_weights(dataloaders["train"], len(cfg["emotion_labels"])).to(cfg["device"])
-    loss_fn = SoftCrossEntropyLoss(class_weights={"emo": class_weights})
+    loss_fn = EmotionNLLLoss()
 
     metrics = create_metrics(cfg)
     metric_manager = MetricManager(metrics)
@@ -107,7 +107,7 @@ def main(cfg: dict, debug: bool = False):
         logger=logger,
         log_dir=log_dir,
         checkpoint_dir=checkpoint_dir,
-        final_activations={"emo": torch.nn.Softmax(dim=1)},
+        final_activations={"emo": lambda x: x},
         ml_logger=ml_logger
     )
 
