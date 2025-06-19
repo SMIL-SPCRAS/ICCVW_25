@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Optional
 from audio.trainer.loss_manager import LossManager
 from audio.trainer.evaluator import Evaluator
 from audio.utils.mlflow_logger import MLflowLogger
-
+from audio.utils.utils import log_logvar
 
 class Trainer:
     """
@@ -83,24 +83,23 @@ class Trainer:
 
         mean_losses = loss_tracker.compute()
         total_loss = sum(mean_losses.values())
-        self.writer.add_scalar(f'{phase}/loss', total_loss, epoch)
         if self.ml_logger:
             self.ml_logger.log_metrics({f"{phase}_loss": total_loss}, step=epoch)
 
+        log_logvar(self.logger, self.ml_logger, outputs, epoch, phase)
+
         for task, value in mean_losses.items():
-            self.writer.add_scalar(f"{phase}/loss_{task}", value, epoch)
             if self.ml_logger:
                 self.ml_logger.log_metrics({f"{phase}_loss_{task}": value}, step=epoch)
 
         lr = self.optimizer.param_groups[0]['lr']
-        self.writer.add_scalar(f'{phase}/learning_rate', lr, epoch)
         if self.ml_logger:
             self.ml_logger.log_metrics({f"{phase}_lr": lr}, step=epoch)
 
         self.logger.info("=" * 80)
         loss_str = " | ".join([f"{task} Loss = {mean_losses[task]:.3f}" for task in mean_losses])
         self.logger.info(f"[Epoch {epoch}] {'🔁' if is_train else '🔍'} {phase.upper()}: Total Loss = {total_loss:.3f} | {loss_str}")
-
+        
         self.history[epoch][f"{phase}_loss"] = total_loss
         self.history[epoch][f"{phase}_lr"] = lr
 

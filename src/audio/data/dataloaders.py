@@ -5,6 +5,8 @@ import pandas as pd
 import torchaudio
 from typing import List, Dict, Any
 
+from audio.utils.vad import SileroVAD
+
 
 class AudioEmotionDataset(Dataset):
     """
@@ -26,7 +28,8 @@ class AudioEmotionDataset(Dataset):
         self.emotion_labels = emotion_labels
         self.sample_rate = sample_rate
         self.num_samples = int(max_length * sample_rate)
-        self.df = self.df.head(10)
+        self.vad = SileroVAD(threshold=0.1)
+        # self.df = self.df.head(10)
 
     def __len__(self) -> int:
         return len(self.df)
@@ -52,4 +55,7 @@ class AudioEmotionDataset(Dataset):
         waveform = self._load_waveform(wav_path)
         emo = torch.tensor(row[self.emotion_labels].values.astype('float32'))
 
-        return waveform, {"emo": emo}, {"db": self.db}
+        has_speech = self.vad(waveform, self.sample_rate)
+
+        return waveform, {"emo": emo}, {"db": self.db, "has_speech": has_speech}
+

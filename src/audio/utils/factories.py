@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 
 from audio.data.dataloaders import AudioEmotionDataset
+from audio.data.collate import speech_only_collate_fn
 from audio.utils.metrics import MacroF1, UAR
 
 def create_dataloaders(cfg):
@@ -39,7 +40,8 @@ def create_dataloaders(cfg):
             ConcatDataset(ds_list),
             batch_size=cfg["batch_size"],
             shuffle=(subset == "train"),
-            num_workers=cfg["num_workers"]
+            num_workers=cfg["num_workers"],
+            collate_fn=speech_only_collate_fn
         )
         for subset, ds_list in datasets.items()
     }

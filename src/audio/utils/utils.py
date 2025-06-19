@@ -49,3 +49,33 @@ def wait_for_it(time_left: int) -> None:
         print("Time left: {0}".format(t))
         time.sleep(60) 
         t = t - 1
+
+
+def log_logvar(logger, ml_logger, outputs, epoch, phase):
+    """
+    Logs average and per-class log-variance with emojis to indicate uncertainty levels.
+    """
+    if "logvar" not in outputs:
+        return
+    
+    avg_logvar = outputs["logvar"].mean().item()
+    ml_logger.log_metrics({f"{phase}_avg_logvar": avg_logvar}, step=epoch)
+    logger.info(f"[Epoch {epoch}] 🧠 {phase.upper()} avg_logvar = {avg_logvar:.3f}")
+    
+    # Per-class logvar (mean across batch)
+    per_class_logvar = outputs["logvar"].mean(dim=0)  # shape: (num_classes,)
+    for i, lv in enumerate(per_class_logvar):
+        ml_logger.log_metrics({f"{phase}_logvar_class_{i}": lv.item()}, step=epoch)
+
+    # Emojis represent model's uncertainty level per emotion class, based on log-variance (logvar):
+    # 😐 (logvar < 0)      → Confident prediction (variance < 1)
+    # 😬 (0 ≤ logvar < 0.5) → Moderate uncertainty (variance ≈ 1 to 1.6)
+    # 😱 (logvar ≥ 0.5)     → High uncertainty (variance > 1.6)
+    class_log_parts = []
+    for i, lv in enumerate(per_class_logvar):
+        emoji = "😐" if lv < 0 else "😬" if lv < 0.5 else "😱"
+        class_log_parts.append(f"cls_{i}: {lv.item():.3f}{emoji}")
+
+    for i in range(0, len(class_log_parts), 4):
+        line = " | ".join(class_log_parts[i:i+4])
+        logger.info(f"[Epoch {epoch}] 📊 {phase.upper()} logvar → {line}")

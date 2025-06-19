@@ -3,8 +3,11 @@ import sys
 import logging
 from datetime import datetime
 from collections import Counter
+from typing import Any
+
 
 import torch
+from torch.utils.data import DataLoader, ConcatDataset
 import mlflow
 
 sys.path.append('src')
@@ -20,21 +23,50 @@ from audio.utils.loss import SoftCrossEntropyLoss
 from audio.utils.mlflow_logger import MLflowLogger
 
 
-def compute_class_weights(dataloader, num_classes):
+def compute_class_weights(
+    dataloader: DataLoader,
+    emotion_labels: list,
+    logger: Any = None
+) -> torch.Tensor:
+    """
+    Computes class weights for a multi-class classification task.
+    """
     counts = Counter()
-    for _, labels, _ in dataloader:
-        for label in labels["emo"]:
-            label_idx = label.argmax().item() if label.ndim >= 1 else label.item()
-            counts[label_idx] += 1
+    dataset = dataloader.dataset
+    num_classes = len(emotion_labels)
+
+    if isinstance(dataset, ConcatDataset):
+        for subds in dataset.datasets:
+            if hasattr(subds, "df") and hasattr(subds, "emotion_labels"):
+                df = subds.df
+                labels = df[emotion_labels].values
+                indices = labels.argmax(axis=1)
+                counts.update(indices.tolist())
+    elif hasattr(dataset, "df") and hasattr(dataset, "emotion_labels"):
+        df = dataset.df
+        labels = df[emotion_labels].values
+        indices = labels.argmax(axis=1)
+        counts.update(indices.tolist())
+    else:
+        for _, labels, _ in dataloader:
+            for label in labels["emo"]:
+                label_idx = label.argmax().item() if label.ndim >= 1 else label.item()
+                counts[label_idx] += 1
 
     total = sum(counts.values())
+    if logger:
+        logger.info("📊 Class distribution:")
+        for i in range(num_classes):
+            count = counts.get(i, 0)
+            logger.info(f"  Class {i}: {count} samples ({(count / total * 100):.2f}%)")
+
     weights = [total / counts.get(i, 1) for i in range(num_classes)]
-    weights = torch.tensor(weights, dtype=torch.float)
-    weights = weights / weights.sum() * num_classes
-    return weights
+    weights_tensor = torch.tensor(weights, dtype=torch.float)
+    weights_tensor = weights_tensor / weights_tensor.sum() * num_classes
+    return weights_tensor
 
 
-def setup_logging(log_dir):
+def setup_logging(log_dir: str):
     logging.basicConfig(level=logging.INFO, handlers=[
         logging.FileHandler(os.path.join(log_dir, "train.log")),
         logging.StreamHandler()
@@ -42,7 +74,7 @@ def setup_logging(log_dir):
     return logging.getLogger("train")
 
 
-def setup_directories(cfg, run_name):
+def setup_directories(cfg: dict, run_name: str):
     log_dir = os.path.join(cfg["log_root"], run_name)
     plot_dir = os.path.join(log_dir, "plots")
     checkpoint_dir = os.path.join(log_dir, "checkpoints")
@@ -72,7 +104,9 @@ def main(cfg: dict, debug: bool = False):
         )
     
     logger.info(f"🚀 Starting run: {run_name}")
-    logger.info(f"💅 Model: {cfg['pretrained_model']}, Scheduler: {cfg['scheduler_type']}, Logging to: {log_dir}")
+    logger.info(f"📸 Logging to: {log_dir}")
+    logger.info(f"💅 Model: {cfg['pretrained_model']}")
+    logger.info(f"👠 Scheduler: {cfg['scheduler_type']}")
 
     dataloaders = create_dataloaders(cfg)
 
@@ -84,7 +118,7 @@ def main(cfg: dict, debug: bool = False):
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"])
     scheduler = create_scheduler(cfg, optimizer)
 
-    class_weights = compute_class_weights(dataloaders["train"], len(cfg["emotion_labels"])).to(cfg["device"])
+    class_weights = compute_class_weights(dataloaders["train"], cfg["emotion_labels"], logger=logger)
     loss_fn = SoftCrossEntropyLoss(class_weights={"emo": class_weights})
 
     metrics = create_metrics(cfg)
