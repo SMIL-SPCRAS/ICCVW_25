@@ -7,21 +7,22 @@ from typing import Any
 
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, ConcatDataset
 import mlflow
 
 sys.path.append('src')
 
 from audio.utils.factories import create_dataloaders, create_scheduler, create_metrics
-from audio.models.models import WavLMEmotionClassifierV4
+from audio.models.uncertainty_aware_models import *
 from audio.trainer.trainer import Trainer
 from audio.trainer.early_stopping import EarlyStopping
 from audio.trainer.metric_manager import MetricManager
 from audio.trainer.evaluator import Evaluator
 from audio.utils.utils import load_config, define_seed
-from audio.utils.loss import EmotionFocalLoss
+from audio.utils.loss import EmotionFocalLossStable
 from audio.utils.mlflow_logger import MLflowLogger
-
+from audio.utils.schedulers import GradientBasedUnfreezeScheduler
 
 def compute_class_weights(
     dataloader: DataLoader,
@@ -115,7 +116,7 @@ def main(cfg: dict, debug: bool = False):
 
     dataloaders = create_dataloaders(cfg)
 
-    model = WavLMEmotionClassifierV4(
+    model = WavLMEmotionClassifierV5(
         pretrained_model_name=cfg["pretrained_model"],
         num_emotions=len(cfg["emotion_labels"])
     ).to(torch.device(cfg["device"]))
@@ -124,7 +125,7 @@ def main(cfg: dict, debug: bool = False):
     scheduler = create_scheduler(cfg, optimizer)
 
     class_weights = compute_class_weights(dataloaders["train"], cfg["emotion_labels"], logger=logger)
-    loss_fn = EmotionFocalLoss(class_weights={"emo": class_weights}, gamma=2.0, label_smoothing=0.1)
+    loss_fn = EmotionFocalLossStable(class_weights={"emo": class_weights})
 
     metrics = create_metrics(cfg)
     metric_manager = MetricManager(metrics)
@@ -134,6 +135,22 @@ def main(cfg: dict, debug: bool = False):
         logger=logger,
         plot_dir=plot_dir,
         ml_logger=ml_logger
+    )
+
+    unfreeze_scheduler = GradientBasedUnfreezeScheduler(
+        model=model,
+        logger=logger,
+        layers_to_track=[
+            "encoder.layers.6", "encoder.layers.7", "encoder.layers.8",
+            "encoder.layers.9", "encoder.layers.10", "encoder.layers.11",
+            "projector", "layernorm"
+        ],
+        max_unfreeze_per_epoch=1,
+        temperature_schedule={
+            0: 1.5,
+            10: 1.0,
+            15: 0.7
+        }
     )
 
     trainer = Trainer(
@@ -147,8 +164,9 @@ def main(cfg: dict, debug: bool = False):
         log_dir=log_dir,
         plot_dir=plot_dir,
         checkpoint_dir=checkpoint_dir,
-        final_activations={"emo": torch.nn.Softmax(dim=1)},
-        ml_logger=ml_logger
+        final_activations={"emo": lambda x: x},
+        ml_logger=ml_logger,
+        unfreeze_scheduler=unfreeze_scheduler
     )
 
     early_stopper = EarlyStopping(
@@ -179,6 +197,6 @@ def main(cfg: dict, debug: bool = False):
 
 
 if __name__ == "__main__":
-    cfg = load_config("audio_config.yaml")
+    cfg = load_config("audio_config_without_others.yaml")
     debug = is_debugging()
     main(cfg, debug=debug)

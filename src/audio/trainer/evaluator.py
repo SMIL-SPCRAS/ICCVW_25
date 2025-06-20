@@ -77,6 +77,6 @@ class Evaluator:
                                title=title, normalize=True, save_path=save_path)
         
         if self.ml_logger:
-            self.ml_logger.log_artifact(save_path, artifact_path=f"plots/{phase}/epoch_{epoch}")
+            self.ml_logger.log_artifact(save_path, artifact_path=f"plots/{phase}/cm_epoch_{epoch}")
 
         return fig
