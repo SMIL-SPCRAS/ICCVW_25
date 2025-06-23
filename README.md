@@ -78,6 +78,13 @@
 - [Train_2](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-7B-Instruct/train_segment_with_text_2.csv)
 - [Dev_2](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-7B-Instruct/dev_segment_with_text_2.csv)
 
+### Qwen2.5-VL-32B-Instruct
+
+- [Train_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-32B-Instruct/train_segment_with_text_1.csv)
+- [Dev_1](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-32B-Instruct/dev_segment_with_text_1.csv)
+- [Train_2](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-32B-Instruct/train_segment_with_text_2.csv)
+- [Dev_2](https://github.com/SMIL-SPCRAS/ICCVW_25/blob/LLMs/AffWild2/Qwen2.5-VL-32B-Instruct/dev_segment_with_text_2.csv)
+
 ## C-EXPR-DB
 
 ### Qwen2.5-VL-3B-Instruct
