@@ -50,9 +50,25 @@ class Trainer:
 
         self.history = defaultdict(dict)
 
+    def _apply_unfreeze_schedule(self, epoch: int) -> None:
+        if epoch in self.unfreeze_schedule:
+            for name, module in self.model.named_modules():
+                for target in self.unfreeze_schedule[epoch]:
+                    if target in name and name not in self.frozen_modules:
+                        for param in module.parameters():
+                            param.requires_grad = True
+                        self.logger.info(f"Unfroze module: {name}")
+                        self.frozen_modules.add(name)
+
     def _run_epoch(self, dataloader: DataLoader, epoch: int, phase: str) -> dict[str, any]:
         is_train = phase == 'train'
         self.model.train() if is_train else self.model.eval()
+
+        if self.unfreeze_scheduler and is_train:
+            self.unfreeze_scheduler.apply(epoch)
+
+        if self.unfreeze_scheduler and hasattr(self.loss_fn, 'set_warmup_mode'):
+            self.loss_fn.set_warmup_mode(self.unfreeze_scheduler.is_warming_up(epoch))
 
         loss_tracker = LossManager()
         for task in self.final_activations:
@@ -105,6 +121,18 @@ class Trainer:
         self.logger.info("=" * 80)
         loss_str = " | ".join([f"{task} Loss = {mean_losses[task]:.3f}" for task in mean_losses])
         self.logger.info(f"[Epoch {epoch}] {'🔁' if is_train else '🔍'} {phase.upper()}: Total Loss = {total_loss:.3f} | {loss_str}")
+        
+        if self.ml_logger:
+            log_logvar(self.logger, self.ml_logger, self.plot_dir, outputs, epoch, phase)
+        
+        if epoch % 5 == 0 and "mu" in outputs and self.ml_logger:
+            log_mu_statistics(
+                outputs["mu"], labels["emo"],
+                epoch=epoch, phase=phase,
+                logger=self.logger,
+                ml_logger=self.ml_logger,
+                plot_dir=self.plot_dir
+            )
         
         self.history[epoch][f"{phase}_loss"] = total_loss
         self.history[epoch][f"{phase}_lr"] = lr

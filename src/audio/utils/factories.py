@@ -1,24 +1,16 @@
 import os
-from typing import Dict, Any, List
 from collections import defaultdict
 
 import torch
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader, ConcatDataset, default_collate
 
 from audio.data.dataloaders import AudioEmotionDataset
-from audio.data.collate import speech_only_collate_fn
 from audio.utils.metrics import MacroF1, UAR
 
-def create_dataloaders(cfg):
-    """
-    Create train/dev/test dataloaders from config.
 
-    Args:
-        cfg (dict): Configuration dictionary.
-
-    Returns:
-        Dict[str, DataLoader]: Dataloaders for each phase.
-    """
+def create_dataloaders(cfg: dict[str, any], processor_name: str = None, 
+                       collate_fn: callable = default_collate) -> dict[str, DataLoader]:
+    """Create train/dev/test dataloaders from config."""
     datasets = defaultdict(list)
 
     for db_name, subsets in cfg["databases"].items():
@@ -31,6 +23,7 @@ def create_dataloaders(cfg):
                 emotion_labels=cfg["emotion_labels"],
                 sample_rate=cfg["sample_rate"],
                 max_length=cfg["max_length"],
+                processor_name=processor_name
             )
 
             datasets[subset].append(dataset)
@@ -41,7 +34,7 @@ def create_dataloaders(cfg):
             batch_size=cfg["batch_size"],
             shuffle=(subset == "train"),
             num_workers=cfg["num_workers"],
-            collate_fn=speech_only_collate_fn
+            collate_fn=collate_fn
         )
         for subset, ds_list in datasets.items()
     }
@@ -50,22 +43,10 @@ def create_dataloaders(cfg):
 
 
 def create_scheduler(
-        cfg: dict,
+        cfg: dict[str, any],
         optimizer: torch.optim.Optimizer,
     ) -> torch.optim.lr_scheduler._LRScheduler:
-    """
-    Factory method to create a learning rate scheduler.
-
-    Args:
-        cfg (dict): Configuration dictionary.
-        optimizer (torch.optim.Optimizer): Optimizer instance.
-
-    Returns:
-        torch.optim.lr_scheduler._LRScheduler: Instantiated learning rate scheduler.
-
-    Raises:
-        ValueError: If the scheduler_type is not registered.
-    """
+    """Factory method to create a learning rate scheduler."""
     scheduler_type = cfg["scheduler_type"]
     scheduler_params = cfg["scheduler_params"]
 
@@ -80,17 +61,8 @@ def create_scheduler(
     return schedulers[scheduler_type](optimizer, scheduler_params)
 
 
-def create_metrics(cfg: Dict[str, Any], task: str = "emo") -> List:
-    """
-    Create a list of metrics based on config.
-
-    Args:
-        cfg (dict): Configuration dictionary.
-        task (str): Task name.
-
-    Returns:
-        List: List of metric instances.
-    """
+def create_metrics(cfg: dict[str, any], task: str = "emo") -> list[any]:
+    """Create a list of metrics based on config."""
     metric_names = cfg.get("metrics", ["UAR", "MacroF1"])
     available = {
         "UAR": UAR,

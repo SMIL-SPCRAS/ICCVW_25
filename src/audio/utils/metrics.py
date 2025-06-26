@@ -4,10 +4,8 @@ from typing import Any
 
 
 class UAR:
-    """
-    Unweighted Average Recall (UAR) metric.
-    """
-    def __init__(self, task: str):
+    """Unweighted Average Recall (UAR) metric."""
+    def __init__(self, task: str) -> None:
         self.task = task
 
     def calc(self, y_true: Any, y_pred: Any) -> float:
@@ -21,15 +19,13 @@ class UAR:
 
         return recall_score(y_true_arr, y_pred_arr, average="macro", zero_division=0)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"uar_{self.task}"
 
 
 class MacroF1:
-    """
-    Macro-averaged F1 score metric.
-    """
-    def __init__(self, task: str):
+    """Macro-averaged F1 score metric."""
+    def __init__(self, task: str) -> None:
         self.task = task
 
     def calc(self, y_true: Any, y_pred: Any) -> float:
@@ -43,5 +39,5 @@ class MacroF1:
 
         return f1_score(y_true_arr, y_pred_arr, average="macro", zero_division=0)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"macro_f1_{self.task}"

@@ -1,3 +1,5 @@
+from audio.trainer.trainer import Trainer
+
 
 class EarlyStopping:
     """
@@ -10,8 +12,8 @@ class EarlyStopping:
         verbose: bool = False,
         delta: float = 0.0,
         monitor: str = 'val_loss',
-        trace_func=print
-    ):
+        trace_func: callable = print
+    ) -> None:
         self.patience = patience
         self.verbose = verbose
         self.delta = delta
@@ -23,7 +25,7 @@ class EarlyStopping:
         self.early_stop = False
         self.best_val = float('inf')
 
-    def __call__(self, metrics: dict, trainer) -> bool:
+    def __call__(self, metrics: dict[str, float], trainer: Trainer, epoch: int = None) -> bool:
         val = metrics.get(self.monitor)
         if val is None:
             raise ValueError(f"Metric '{self.monitor}' not found in metrics dict.")
@@ -43,5 +45,8 @@ class EarlyStopping:
             self.best_score = score
             trainer.save_checkpoint(epoch=metrics.get("epoch", -1), val_metric=val, is_best=True)
             self.counter = 0
+
+        if epoch:
+            trainer.save_checkpoint(epoch=epoch, val_metric=val)
 
         return self.early_stop

@@ -1,36 +1,31 @@
 import os
+import sys
 import time
 import random
-from typing import Dict, Any
+import logging
+from collections import Counter
 
 import yaml
 import torch
 import numpy as np
+from torch.utils.data import DataLoader, ConcatDataset
+import mlflow
 
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    """
-    Load YAML configuration file.
+from audio.utils.mlflow_logger import MLflowLogger
 
-    Args:
-        config_path (str): Path to the YAML configuration file.
 
-    Returns:
-        Dict[str, Any]: Parsed configuration as a dictionary.
-    """
+def load_config(config_path: str) -> dict[str, any]:
+    """Load YAML configuration file."""
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
     
     
 def define_seed(seed: int = 12) -> None:
-    """Fix seed for reproducibility
-
-    Args:
-        seed (int, optional): seed value. Defaults to 12.
-    """
+    """Fix seed for reproducibility"""
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
@@ -40,11 +35,7 @@ def define_seed(seed: int = 12) -> None:
     
     
 def wait_for_it(time_left: int) -> None:
-    """Wait time in minutes. before run the following statement
-
-    Args:
-        time_left (int): time in minutes
-    """
+    """Wait time in minutes. before run the following statement"""
     t = time_left
     while t > 0:
         print("Time left: {0}".format(t))
@@ -52,10 +43,79 @@ def wait_for_it(time_left: int) -> None:
         t = t - 1
 
 
-def log_logvar(logger, ml_logger, plot_dir, outputs, epoch, phase):
-    """
-    Logs average and per-class log-variance with emojis to indicate uncertainty levels.
-    """
+def compute_class_weights(
+    dataloader: DataLoader,
+    emotion_labels: list[str],
+    logger: any = None) -> torch.Tensor:
+    """Computes class weights for a multi-class classification task."""
+    counts = Counter()
+    dataset = dataloader.dataset
+    num_classes = len(emotion_labels)
+
+    if isinstance(dataset, ConcatDataset):
+        for subds in dataset.datasets:
+            if hasattr(subds, "df") and hasattr(subds, "emotion_labels"):
+                df = subds.df
+                labels = df[emotion_labels].values
+                indices = labels.argmax(axis=1)
+                counts.update(indices.tolist())
+    elif hasattr(dataset, "df") and hasattr(dataset, "emotion_labels"):
+        df = dataset.df
+        labels = df[emotion_labels].values
+        indices = labels.argmax(axis=1)
+        counts.update(indices.tolist())
+    else:
+        for _, labels, _ in dataloader:
+            for label in labels["emo"]:
+                label_idx = label.argmax().item() if label.ndim >= 1 else label.item()
+                counts[label_idx] += 1
+
+    total = sum(counts.values())
+    if logger:
+        logger.info("📊 Class distribution:")
+        for i in range(num_classes):
+            count = counts.get(i, 0)
+            logger.info(f"  Class {i}: {count} samples ({(count / total * 100):.2f}%)")
+
+    weights = [total / counts.get(i, 1) for i in range(num_classes)]
+    weights_tensor = torch.tensor(weights, dtype=torch.float)
+    weights_tensor = weights_tensor / weights_tensor.sum() * num_classes
+    return weights_tensor
+
+
+def is_debugging() -> bool:
+    gettrace = getattr(sys, 'gettrace', None)
+    return gettrace is not None and gettrace()
+
+
+def setup_logging(log_dir: str) -> any:
+    logging.basicConfig(level=logging.INFO, handlers=[
+        logging.FileHandler(os.path.join(log_dir, "train.log")),
+        logging.StreamHandler()
+    ])
+    return logging.getLogger("train")
+
+
+def setup_directories(cfg: dict[any], run_name: str, debug: bool = False) -> tuple[str, str, str]:
+    log_dir = os.path.join(cfg["log_root"], run_name)
+    plot_dir = os.path.join(log_dir, "plots")
+    checkpoint_dir = os.path.join(log_dir, "checkpoints")
+
+    os.makedirs(plot_dir, exist_ok=True)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    if not debug:
+        # log base paths to MLflow for traceability
+        mlflow.log_param("log_dir", log_dir)
+        mlflow.log_param("checkpoint_dir", checkpoint_dir)
+    
+    return log_dir, plot_dir, checkpoint_dir
+
+
+def log_logvar(logger: any, ml_logger: MLflowLogger, plot_dir: str, 
+               outputs: dict[str, torch.Tensor], 
+               epoch: int, phase: str) -> None:
+    """Logs average and per-class log-variance with emojis to indicate uncertainty levels."""
     if "logvar" not in outputs:
         return
     
@@ -99,10 +159,11 @@ def log_logvar(logger, ml_logger, plot_dir, outputs, epoch, phase):
         ml_logger.log_artifact(save_path, artifact_path=f"plots/{phase}/mu_hist_epoch_{epoch}")
 
 
-def log_mu_statistics(mu: torch.Tensor, targets: torch.Tensor, epoch: int, phase: str, logger, ml_logger=None, plot_dir=None):
-    """
-    Logs mu distribution, top-1 predictions, and per-class mean mu.
-    """
+def log_mu_statistics(mu: torch.Tensor, 
+                      targets: torch.Tensor, 
+                      epoch: int, phase: str, logger: any, ml_logger: MLflowLogger = None, 
+                      plot_dir: str = None) -> None:
+    """Logs mu distribution, top-1 predictions, and per-class mean mu."""
     mu = mu.detach().cpu()
     targets = targets.detach().cpu()
     pred_classes = mu.argmax(dim=-1)

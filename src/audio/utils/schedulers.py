@@ -2,13 +2,13 @@ import torch.nn as nn
 
 
 class UnfreezeScheduler:
-    def __init__(self, model, logger, schedule: dict):
+    def __init__(self, model: nn.Module, logger: any, schedule: dict[int, list[str]]) -> None:
         self.model = model
         self.logger = logger
         self.schedule = schedule
         self.unfroze = set()
 
-    def apply(self, epoch: int):
+    def apply(self, epoch: int) -> None:
         if epoch in self.schedule:
             for name, module in self.model.named_modules():
                 for target in self.schedule[epoch]:
@@ -30,12 +30,12 @@ class GradientBasedUnfreezeScheduler:
     def __init__(
         self,
         model: nn.Module,
-        logger,
+        logger: any,
         layers_to_track: list[str],
         threshold: float = 1e-4,
         max_unfreeze_per_epoch: int = 1,
         temperature_schedule: dict[int, float] = None,
-    ):
+    ) -> None:
         self.model = model
         self.logger = logger
         self.layers_to_track = layers_to_track
@@ -49,7 +49,7 @@ class GradientBasedUnfreezeScheduler:
         """Return whether the model is in the warmup phase."""
         return self._is_warming_up
 
-    def step(self, epoch: int):
+    def step(self, epoch: int) -> None:
         """
         Called during training. Computes gradient norms for tracked layers
         and unfreezes the most promising ones.
@@ -88,5 +88,5 @@ class GradientBasedUnfreezeScheduler:
                 self.model.uncertainty_head.temperature = new_temp
                 self.logger.info(f"🔥 Temperature set to {new_temp} at epoch {epoch}")
 
-    def apply(self, epoch: int):
+    def apply(self, epoch: int) -> None:
         self.step(epoch)

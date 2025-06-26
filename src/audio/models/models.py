@@ -3,16 +3,11 @@ import torch.nn as nn
 from transformers import AutoModel, AutoFeatureExtractor
 
 
-import torch
-import torch.nn as nn
-from transformers import AutoModel, AutoFeatureExtractor
-
-
 class WavLMEmotionClassifier(nn.Module):
     """
     Fine-tuned WavLM-based emotion classifier with improved architecture.
     """
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -34,7 +29,7 @@ class WavLMEmotionClassifier(nn.Module):
             nn.Linear(256, num_emotions)
         )
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -55,7 +50,7 @@ class WavLMEmotionClassifierV2(nn.Module):
     """
     Fine-tuned WavLM-based emotion classifier with improved architecture.
     """
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -81,7 +76,7 @@ class WavLMEmotionClassifierV2(nn.Module):
             nn.Linear(256, num_emotions)
         )
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -99,7 +94,7 @@ class WavLMEmotionClassifierV2(nn.Module):
 
 
 class SelfAttentionClassifier(nn.Module):
-    def __init__(self, input_dim, num_emotions):
+    def __init__(self, input_dim: int, num_emotions: int) -> None:
         super().__init__()
         self.attention = nn.MultiheadAttention(embed_dim=input_dim, num_heads=4, batch_first=True)
         self.gru = nn.GRU(input_dim, input_dim, batch_first=True, bidirectional=True)
@@ -116,18 +111,19 @@ class SelfAttentionClassifier(nn.Module):
             nn.Linear(256, num_emotions)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         attn_output, _ = self.attention(x, x, x)
         gru_output, _ = self.gru(attn_output)
         pooled = gru_output.mean(dim=1)
         normed = self.layernorm(pooled)
         return self.classifier(normed)
 
+
 class WavLMEmotionClassifierV3(nn.Module):
     """
     Improved WavLM-based emotion classifier with attention and recurrent layer.
     """
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -142,7 +138,7 @@ class WavLMEmotionClassifierV3(nn.Module):
 
         self.classifier = SelfAttentionClassifier(self.encoder.config.hidden_size, num_emotions)
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -158,7 +154,7 @@ class WavLMEmotionClassifierV3(nn.Module):
     
 
 class AttentionPooling(nn.Module):
-    def __init__(self, input_dim: int):
+    def __init__(self, input_dim: int) -> None:
         super().__init__()
         self.attention = nn.Sequential(
             nn.Linear(input_dim, input_dim),
@@ -173,13 +169,13 @@ class AttentionPooling(nn.Module):
 
 
 class ResidualBiLSTMBlock(nn.Module):
-    def __init__(self, input_dim: int):
+    def __init__(self, input_dim: int) -> None:
         super().__init__()
         self.lstm = nn.LSTM(input_dim, input_dim, batch_first=True, bidirectional=True)
         self.projection = nn.Linear(input_dim * 2, input_dim)  # reduce to input_dim
         self.norm = nn.LayerNorm(input_dim)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, _ = self.lstm(x)
         out = self.projection(out)
         out = self.norm(out + x)  # Residual connection
@@ -187,7 +183,7 @@ class ResidualBiLSTMBlock(nn.Module):
 
 
 class WavLMEmotionClassifierV4(nn.Module):
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -213,7 +209,19 @@ class WavLMEmotionClassifierV4(nn.Module):
             nn.Linear(256, num_emotions)
         )
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def extract_features(self, waveform: torch.Tensor) -> torch.Tensor:
+        if waveform.ndim == 3:
+            waveform = waveform.squeeze(1)
+
+        with torch.no_grad():
+            outputs = self.encoder(waveform, output_hidden_states=False, return_dict=True)
+            features = outputs.last_hidden_state  # (B, T, D)
+            features = self.sequence_model(features)  # BiLSTM + residual
+            pooled = self.pooling(features)  # attention pooling
+        
+        return pooled  # (B, D)
+
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 

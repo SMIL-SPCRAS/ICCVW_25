@@ -1,19 +1,19 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict
 
 
 class SoftCrossEntropyLoss(nn.Module):
-    """
-    Soft Cross Entropy Loss supporting class weights and multi-task outputs.
-    """
-    def __init__(self, class_weights: Dict[str, torch.Tensor] = None):
+    """Soft Cross Entropy Loss supporting class weights and multi-task outputs."""
+    def __init__(self, 
+                 class_weights: dict[str, torch.Tensor] | None = None) -> None:
         super().__init__()
         self.class_weights = class_weights or {}
         self.loss_values = {}
 
-    def forward(self, outputs: Dict[str, torch.Tensor], targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
         total_loss = 0.0
         self.loss_values = {}
 
@@ -32,14 +32,52 @@ class SoftCrossEntropyLoss(nn.Module):
         return total_loss
     
 
-class EmotionFocalLoss(nn.Module):
-    """
-    Focal Loss with support for multi-task outputs, soft targets, class weights, and label smoothing.
-    """
+class SoftFocalLoss(nn.Module):
     def __init__(self,
-                 class_weights: Dict[str, torch.Tensor] = None,
                  gamma: float = 2.0,
-                 label_smoothing: float = 0.0):
+                 class_weights: dict[str, torch.Tensor] | None = None,
+                 label_smoothing: float = 0.0,
+                 eps: float = 1e-7) -> None:
+        super().__init__()
+        self.gamma = gamma
+        self.class_weights = class_weights or {}
+        self.label_smoothing = label_smoothing
+        self.eps = eps
+        self.loss_values = {}
+
+    def forward(self,
+                outputs: dict[str, torch.Tensor],
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
+        total = 0.0
+        self.loss_values = {}
+
+        for task, logits in outputs.items():
+            log_p = F.log_softmax(logits, dim=-1) # log p_i
+            p = log_p.exp() # p_i
+            t = targets[task].to(logits.device) # t_i
+
+            if self.label_smoothing > 0:
+                t = t * (1 - self.label_smoothing) + self.label_smoothing / t.size(-1)
+
+            # class-weights ≡ αᵢ
+            if task in self.class_weights:
+                alpha = self.class_weights[task].to(logits.device)  # shape (C,)
+                t = t * alpha.unsqueeze(0)
+
+            focal = (1.0 - p).clamp(min=self.eps).pow(self.gamma)  # (1-p)^{γ}
+            loss = -(t * focal * log_p).sum(dim=-1).mean()  # sum_i …
+            self.loss_values[task] = loss.detach()
+            total += loss
+
+        return total
+    
+
+class EmotionFocalLoss(nn.Module):
+    """Focal Loss with support for multi-task outputs, soft targets, class weights, and label smoothing."""
+    def __init__(self,
+                 class_weights: dict[str, torch.Tensor] | None = None,
+                 gamma: float = 2.0,
+                 label_smoothing: float = 0.0) -> None:
         super().__init__()
         self.class_weights = class_weights or {}
         self.gamma = gamma
@@ -47,8 +85,8 @@ class EmotionFocalLoss(nn.Module):
         self.loss_values = {}
 
     def forward(self,
-                outputs: Dict[str, torch.Tensor],
-                targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+                outputs: dict[str, torch.Tensor],
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
         total_loss = 0.0
         self.loss_values = {}
 
@@ -82,11 +120,11 @@ class EmotionNLLLoss(nn.Module):
     Switch between hard and soft targets using `use_soft_labels`.
     """
     def __init__(self, 
-                 class_weights: Dict[str, torch.Tensor] = None, 
+                 class_weights: dict[str, torch.Tensor] | None = None, 
                  use_soft_labels: bool = True,
                  clamp_logvar: bool = True,
-                 logvar_clamp_range: tuple = (-3.0, 3.0),
-                 logvar_reg_weight: float = 0.01):
+                 logvar_clamp_range: tuple[float, float] = (-3.0, 3.0),
+                 logvar_reg_weight: float = 0.01) -> None:
         super().__init__()
         self.class_weights = class_weights or {}
         self.use_soft_labels = use_soft_labels
@@ -95,7 +133,9 @@ class EmotionNLLLoss(nn.Module):
         self.logvar_reg_weight = logvar_reg_weight
         self.loss_values = {}
 
-    def forward(self, outputs: Dict[str, torch.Tensor], targets: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
         total_loss = 0.0
         self.loss_values = {}
 
@@ -137,13 +177,13 @@ class EmotionNLLLossStable(nn.Module):
     Avoids collapse due to extreme logvars and includes optional kl-penalty and label smoothing.
     """
     def __init__(self,
-                 class_weights: dict = None,
+                 class_weights: dict[str, torch.Tensor] | None = None,
                  use_soft_labels: bool = True,
                  clamp_logvar: bool = True,
-                 logvar_clamp_range: tuple = (-3.0, 3.0),
+                 logvar_clamp_range: tuple[float, float] = (-3.0, 3.0),
                  logvar_reg_weight: float = 0.01,
                  kl_weight: float = 0.5,
-                 label_smoothing: float = 0.1):
+                 label_smoothing: float = 0.1) -> None:
         super().__init__()
         self.class_weights = class_weights or {}
         self.use_soft_labels = use_soft_labels
@@ -155,12 +195,15 @@ class EmotionNLLLossStable(nn.Module):
 
         self.loss_values = {}
 
-    def set_warmup_mode(self, is_warmup: bool):
+    def set_warmup_mode(self,
+                        is_warmup: bool):
         self.use_soft_labels = is_warmup
         self.label_smoothing = 0.2 if is_warmup else 0.0
         self.kl_weight = 0.01 if is_warmup else 0.5
 
-    def forward(self, outputs: dict, targets: dict) -> torch.Tensor:
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
         mu = outputs["mu"]                      # shape: [B, C]
         logvar = outputs["logvar"]              # shape: [B, C]
         probs = outputs["emo"]                  # softmax(mu / temperature)
@@ -208,17 +251,14 @@ class EmotionNLLLossStable(nn.Module):
 class EmotionFocalLossStable(nn.Module):
     def __init__(
         self,
-        class_weights: dict = None,
+        class_weights: dict[str, torch.Tensor] | None = None,
         gamma: float = 2.0,
         use_soft_labels: bool = True,
         clamp_logvar: bool = True,
-        logvar_clamp_range: tuple = (-3.0, 3.0),
+        logvar_clamp_range: tuple[float, float] = (-3.0, 3.0),
         logvar_reg_weight: float = 0.1,
         kl_weight: float = 0.5,
-        label_smoothing: float = 0.1,
-        confidence_penalty_weight: float = 0.05,
-        logvar_min: float = -1.5
-    ):
+        label_smoothing: float = 0.1, confidence_penalty_weight: float = 0.05, logvar_min: float = -1.5) -> None:
         super().__init__()
         self.class_weights = class_weights or {}
         self.gamma = gamma
@@ -232,12 +272,15 @@ class EmotionFocalLossStable(nn.Module):
         self.logvar_min = logvar_min
         self.loss_values = {}
 
-    def set_warmup_mode(self, is_warmup: bool):
+    def set_warmup_mode(self, 
+                        is_warmup: bool) -> None:
         self.use_soft_labels = is_warmup
         self.label_smoothing = 0.2 if is_warmup else 0.0
         self.kl_weight = 0.01 if is_warmup else 0.5
 
-    def forward(self, outputs: dict, targets: dict) -> torch.Tensor:
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
         mu = outputs["mu"]
         logvar = outputs["logvar"]
         probs = outputs["emo"]
@@ -292,4 +335,85 @@ class EmotionFocalLossStable(nn.Module):
             total_loss += task_loss
             self.loss_values[task] = task_loss
 
+        return total_loss
+    
+
+class MultiHeadFocalLoss(nn.Module):
+    def __init__(self, 
+                 gamma: float = 2.0, 
+                 class_weights: dict[str, torch.Tensor] | None = None,
+                 bootstrap_ratio: float = 0.1) -> None:
+        super().__init__()
+        self.gamma = gamma
+        self.class_weights = class_weights
+        self.bootstrap_ratio = bootstrap_ratio
+        self.loss_values = {}
+
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
+        logits_list = outputs["emo_heads"]
+        target = targets["emo"]
+        total_loss = 0.0
+
+        if self.class_weights is not None:
+            cw = self.class_weights.to(target.device)
+            target = target * cw.unsqueeze(0)
+
+        # Bootstrap
+        K = target.size(-1)
+        uniform = torch.full_like(target, 1.0 / K)
+        target_bs = (1 - self.bootstrap_ratio) * target + self.bootstrap_ratio * uniform
+
+        for idx, logits in enumerate(logits_list):
+            prob = F.softmax(logits, dim=-1)
+            logp = F.log_softmax(logits, dim=-1)
+
+            pt = (prob * target_bs).sum(dim=-1).clamp(min=1e-6)
+            focal_w = (1 - pt) ** self.gamma
+
+            loss = -(target_bs * logp).sum(dim=-1) * focal_w
+            loss = loss.mean()
+
+            self.loss_values[f"emo_head_{idx}"] = loss
+            total_loss += loss
+
+        total_loss = total_loss / len(logits_list)
+        self.loss_values = {"emo": total_loss}
+        return total_loss
+
+
+class MultiHeadSoftCrossEntropyLoss(nn.Module):
+    def __init__(self, 
+                 class_weights: dict[str, torch.Tensor] | None = None,
+                 bootstrap_ratio: float = 0.1) -> None:
+        super().__init__()
+        self.class_weights = class_weights
+        self.bootstrap_ratio = bootstrap_ratio
+        self.loss_values = {}
+
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
+        logits_list = outputs["emo_heads"]
+        target = targets["emo"]
+        total_loss = 0.0
+
+        if self.class_weights is not None:
+            cw = self.class_weights.to(target.device)
+            target = target * cw.unsqueeze(0)
+
+        # Bootstrap
+        K = target.size(-1)
+        uniform = torch.full_like(target, 1.0 / K)
+        target_bs = (1 - self.bootstrap_ratio) * target + self.bootstrap_ratio * uniform
+
+        for idx, logits in enumerate(logits_list):
+            log_probs = F.log_softmax(logits, dim=-1)
+            loss = -(target_bs * log_probs).sum(dim=-1).mean()
+            self.loss_values[f"emo_head_{idx}"] = loss
+            total_loss += loss
+            
+        total_loss = total_loss / len(logits_list)
+        self.loss_values = {"emo": total_loss}
         return total_loss

@@ -7,16 +7,17 @@ import torch
 sys.path.append('src')
 
 from audio.utils.factories import create_dataloaders, create_scheduler, create_metrics
-from audio.models.models import WavLMEmotionClassifierV4
-from audio.trainer.trainer import Trainer
+from audio.models.vae_models import *
+from audio.trainer.vae_trainer import Trainer
 from audio.trainer.early_stopping import EarlyStopping
 from audio.trainer.metric_manager import MetricManager
 from audio.trainer.evaluator import Evaluator
 from audio.utils.utils import load_config, define_seed, setup_directories, \
     setup_logging, compute_class_weights, is_debugging, wait_for_it
-from audio.utils.loss import SoftFocalLoss, SoftCrossEntropyLoss
+from audio.utils.loss import EmotionNLLLossStable
 from audio.utils.mlflow_logger import MLflowLogger
 from audio.data.collate import speech_only_collate_fn
+from audio.utils.schedulers import UnfreezeScheduler
 
 
 def main(cfg: dict[str, any], debug: bool = False) -> None:
@@ -41,7 +42,7 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
 
     dataloaders = create_dataloaders(cfg, collate_fn=speech_only_collate_fn)
 
-    model = WavLMEmotionClassifierV4(
+    model = WavLMEmotionClassifierV5(
         pretrained_model_name=cfg["pretrained_model"],
         num_emotions=len(cfg["emotion_labels"])
     ).to(torch.device(cfg["device"]))
@@ -50,8 +51,7 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
     scheduler = create_scheduler(cfg, optimizer)
 
     class_weights = compute_class_weights(dataloaders["train"], cfg["emotion_labels"], logger=logger)
-    loss_fn = SoftFocalLoss(class_weights={"emo": class_weights}, gamma=2.0, label_smoothing=0.1)
-    # loss_fn = SoftCrossEntropyLoss(class_weights={"emo": class_weights})
+    loss_fn = EmotionNLLLossStable(class_weights={"emo": class_weights})
 
     metrics = create_metrics(cfg)
     metric_manager = MetricManager(metrics)
@@ -61,6 +61,20 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         logger=logger,
         plot_dir=plot_dir,
         ml_logger=ml_logger
+    )
+
+    unfreeze_scheduler = UnfreezeScheduler(
+        model=model, 
+        logger=logger,
+        schedule={
+            2: ['encoder.layers.6'],
+            3: ['encoder.layers.7'],
+            4: ['encoder.layers.8'],
+            5: ['encoder.layers.9'],
+            6: ['encoder.layers.10'],
+            7: ['encoder.layers.11'],
+            8: ['projector', 'layernorm']
+        }
     )
 
     trainer = Trainer(
@@ -74,8 +88,9 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         log_dir=log_dir,
         plot_dir=plot_dir,
         checkpoint_dir=checkpoint_dir,
-        final_activations={"emo": torch.nn.Softmax(dim=1)},
-        ml_logger=ml_logger
+        final_activations={"emo": lambda x: x},
+        ml_logger=ml_logger,
+        unfreeze_scheduler=unfreeze_scheduler
     )
 
     early_stopper = EarlyStopping(
@@ -106,7 +121,6 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    # wait_for_it(4 * 60)
-    cfg = load_config("audio_config_filtered_others.yaml")
+    cfg = load_config("audio_config_vae_without_others.yaml")
     debug = is_debugging()
     main(cfg, debug=debug)

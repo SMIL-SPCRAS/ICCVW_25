@@ -7,14 +7,14 @@ import torch
 sys.path.append('src')
 
 from audio.utils.factories import create_dataloaders, create_scheduler, create_metrics
-from audio.models.models import WavLMEmotionClassifierV4
+from audio.models.multihead_models import *
 from audio.trainer.trainer import Trainer
 from audio.trainer.early_stopping import EarlyStopping
 from audio.trainer.metric_manager import MetricManager
 from audio.trainer.evaluator import Evaluator
 from audio.utils.utils import load_config, define_seed, setup_directories, \
     setup_logging, compute_class_weights, is_debugging, wait_for_it
-from audio.utils.loss import SoftFocalLoss, SoftCrossEntropyLoss
+from audio.utils.loss import MultiHeadFocalLoss
 from audio.utils.mlflow_logger import MLflowLogger
 from audio.data.collate import speech_only_collate_fn
 
@@ -39,19 +39,27 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
     logger.info(f"💅 Model: {cfg['pretrained_model']}")
     logger.info(f"👠 Scheduler: {cfg['scheduler_type']}")
 
-    dataloaders = create_dataloaders(cfg, collate_fn=speech_only_collate_fn)
+    dataloaders = create_dataloaders(cfg, cfg["pretrained_model"], collate_fn=speech_only_collate_fn)
+    # dataloaders = create_dataloaders(cfg, collate_fn=speech_only_collate_fn)
 
-    model = WavLMEmotionClassifierV4(
+    model = MultiHeadWhisperEmotionClassifier(
         pretrained_model_name=cfg["pretrained_model"],
-        num_emotions=len(cfg["emotion_labels"])
+        num_emotions=len(cfg["emotion_labels"]),
+        num_heads=3,
+        max_position=200 # 4 seconds → 200 frames
     ).to(torch.device(cfg["device"]))
+
+    # model = MultiHeadWavLMEmotionClassifier(
+    #     pretrained_model_name=cfg["pretrained_model"],
+    #     num_emotions=len(cfg["emotion_labels"]),
+    #     num_heads=3,
+    # ).to(torch.device(cfg["device"]))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"])
     scheduler = create_scheduler(cfg, optimizer)
 
     class_weights = compute_class_weights(dataloaders["train"], cfg["emotion_labels"], logger=logger)
-    loss_fn = SoftFocalLoss(class_weights={"emo": class_weights}, gamma=2.0, label_smoothing=0.1)
-    # loss_fn = SoftCrossEntropyLoss(class_weights={"emo": class_weights})
+    loss_fn = MultiHeadFocalLoss(class_weights=class_weights, gamma=2.0)
 
     metrics = create_metrics(cfg)
     metric_manager = MetricManager(metrics)
@@ -74,7 +82,7 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         log_dir=log_dir,
         plot_dir=plot_dir,
         checkpoint_dir=checkpoint_dir,
-        final_activations={"emo": torch.nn.Softmax(dim=1)},
+        final_activations={"emo": torch.nn.Softmax(dim=-1)},
         ml_logger=ml_logger
     )
 
@@ -106,7 +114,6 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    # wait_for_it(4 * 60)
-    cfg = load_config("audio_config_filtered_others.yaml")
+    cfg = load_config("audio_config_multihead.yaml")
     debug = is_debugging()
     main(cfg, debug=debug)

@@ -4,16 +4,12 @@ sys.path.append('src')
 
 import subprocess
 from tqdm import tqdm
-from typing import List, Dict, Any
-
 
 from audio.utils.utils import load_config
 
 
-def extract_audio_ffmpeg(video_path: str, audio_path: str, config: Dict[str, Any]) -> None:
-    """
-    Extract audio from a video file using ffmpeg.
-    """
+def extract_audio_ffmpeg(video_path: str, audio_path: str, config: dict[str, any]) -> None:
+    """Extract audio from a video file using ffmpeg."""
     # Ensure the output directory exists
     os.makedirs(os.path.dirname(audio_path), exist_ok=True)
 
@@ -41,10 +37,8 @@ def extract_audio_ffmpeg(video_path: str, audio_path: str, config: Dict[str, Any
         print(f"Failed to extract from: {video_path}")
 
 
-def get_all_video_files(config: Dict[str, Any]) -> List[str]:
-    """
-    Recursively find all video files in a directory with specified extensions.
-    """
+def get_all_video_files(config: dict[str, any]) -> list[str]:
+    """Recursively find all video files in a directory with specified extensions."""
     video_files = []
     src_root = config["source_dir"]
     splits = config["splits"]
@@ -64,10 +58,8 @@ def get_all_video_files(config: Dict[str, Any]) -> List[str]:
     return video_files
 
 
-def process_videos(config: Dict[str, Any]) -> None:
-    """
-    Process all video files according to configuration and extract audio.
-    """
+def process_videos(config: dict[str, any]) -> None:
+    """Process all video files according to configuration and extract audio."""
     # Load configuration values
     src_root = config["source_dir"]
     dst_root = config["output_audio_dir"]

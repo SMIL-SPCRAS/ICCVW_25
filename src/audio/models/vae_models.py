@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel, AutoFeatureExtractor
 
+
 class TemporalRelationalModuleV1(nn.Module):
-    def __init__(self, input_dim, num_segments=3):
+    def __init__(self, input_dim: int, num_segments: int = 3) -> None:
         super().__init__()
         self.num_segments = num_segments
         self.segment_attn = nn.ModuleList([
@@ -22,7 +23,7 @@ class TemporalRelationalModuleV1(nn.Module):
             nn.Dropout(0.3)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, D = x.shape
         segment_len = T // self.num_segments
         segments = [x[:, i * segment_len:(i + 1) * segment_len, :] for i in range(self.num_segments)]
@@ -38,19 +39,19 @@ class TemporalRelationalModuleV1(nn.Module):
 
 
 class EmotionUncertaintyHeadV1(nn.Module):
-    def __init__(self, input_dim, num_classes):
+    def __init__(self, input_dim: int, num_classes: int) -> None:
         super().__init__()
         self.mean_head = nn.Linear(input_dim, num_classes)
         self.logvar_head = nn.Linear(input_dim, num_classes)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mu = self.mean_head(x)
         logvar = self.logvar_head(x)
         return mu, logvar
     
 
 class EmotionUncertaintyHeadV2(nn.Module):
-    def __init__(self, input_dim, num_classes):
+    def __init__(self, input_dim: int, num_classes: int) -> None:
         super().__init__()
         self.mean_head = nn.Sequential(
             nn.Linear(input_dim, input_dim),
@@ -68,14 +69,14 @@ class EmotionUncertaintyHeadV2(nn.Module):
             nn.Linear(input_dim, num_classes)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mu = self.mean_head(x)
         logvar = self.logvar_head(x)
         return mu, logvar
     
 
 class EmotionUncertaintyHeadV3(nn.Module):
-    def __init__(self, input_dim, num_classes, temperature=1.0):
+    def __init__(self, input_dim: int, num_classes: int, temperature: float = 1.0) -> None:
         super().__init__()
         self.temperature = temperature
 
@@ -97,13 +98,13 @@ class EmotionUncertaintyHeadV3(nn.Module):
 
         self._init_weights()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         mu = self.mean_head(x)
         logvar = self.logvar_head(x)
         probs = F.softmax(mu / self.temperature, dim=-1)
         return mu, logvar, probs
 
-    def _init_weights(self):
+    def _init_weights(self) -> None:
         for module in [self.mean_head, self.logvar_head]:
             for layer in module:
                 if isinstance(layer, nn.Linear):
@@ -113,7 +114,8 @@ class EmotionUncertaintyHeadV3(nn.Module):
 
 
 class EmotionUncertaintyHeadV4(nn.Module):
-    def __init__(self, input_dim, output_dim, logvar_clamp_range=(-3.0, 3.0), temperature=1.5):
+    def __init__(self, input_dim: int, output_dim: int, 
+                 logvar_clamp_range: tuple[float, float] = (-3.0, 3.0), temperature: float = 1.5) -> None:
         super().__init__()
         self.mu_layer = nn.Linear(input_dim, output_dim)
         self.logvar_layer = nn.Linear(input_dim, output_dim)
@@ -129,7 +131,7 @@ class EmotionUncertaintyHeadV4(nn.Module):
         nn.init.xavier_uniform_(self.logvar_layer.weight, gain=0.1)
         nn.init.constant_(self.logvar_layer.bias, -1.0)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         mu = self.mu_layer(x)  # [B, C]
         logvar = self.logvar_layer(x).clamp(*self.logvar_clamp_range)  # [B, C]
         probs = F.softmax(mu / self.temperature, dim=-1)
@@ -138,7 +140,7 @@ class EmotionUncertaintyHeadV4(nn.Module):
 
 
 class WavLMEmotionClassifierV1(nn.Module):
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -152,7 +154,7 @@ class WavLMEmotionClassifierV1(nn.Module):
         self.temporal_module = TemporalRelationalModuleV1(self.encoder.config.hidden_size)
         self.uncertainty_head = EmotionUncertaintyHeadV1(256, num_emotions)
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -165,7 +167,7 @@ class WavLMEmotionClassifierV1(nn.Module):
     
     
 class WavLMEmotionClassifierV2(nn.Module):
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -195,7 +197,7 @@ class WavLMEmotionClassifierV2(nn.Module):
 
         self.uncertainty_head = EmotionUncertaintyHeadV1(256, num_emotions)
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -214,7 +216,7 @@ class WavLMEmotionClassifierV2(nn.Module):
     
 
 class WavLMEmotionClassifierV3(nn.Module):
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -244,7 +246,7 @@ class WavLMEmotionClassifierV3(nn.Module):
 
         self.uncertainty_head = EmotionUncertaintyHeadV2(256, num_emotions)
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -263,7 +265,7 @@ class WavLMEmotionClassifierV3(nn.Module):
     
 
 class WavLMEmotionClassifierV4(nn.Module):
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -293,7 +295,7 @@ class WavLMEmotionClassifierV4(nn.Module):
 
         self.uncertainty_head = EmotionUncertaintyHeadV3(256, num_emotions, temperature=1.5)
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 
@@ -311,7 +313,7 @@ class WavLMEmotionClassifierV4(nn.Module):
     
 
 class WavLMEmotionClassifierV5(nn.Module):
-    def __init__(self, pretrained_model_name: str, num_emotions: int):
+    def __init__(self, pretrained_model_name: str, num_emotions: int) -> None:
         super().__init__()
         self.feature_extractor = AutoFeatureExtractor.from_pretrained(pretrained_model_name)
         self.encoder = AutoModel.from_pretrained(pretrained_model_name)
@@ -343,7 +345,7 @@ class WavLMEmotionClassifierV5(nn.Module):
 
         self.uncertainty_head = EmotionUncertaintyHeadV4(256, num_emotions, temperature=1.5)
 
-    def forward(self, waveform: torch.Tensor) -> dict:
+    def forward(self, waveform: torch.Tensor) -> dict[str, torch.Tensor]:
         if waveform.ndim == 3:
             waveform = waveform.squeeze(1)
 

@@ -1,25 +1,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import seaborn as sns
 
 import torch
 
 
-def plot_conf_matrix(cm, labels, title, save_path=None, normalize=False, figsize=(8, 6), xticks_rotation=45):
+def plot_conf_matrix(cm: np.ndarray, labels: list[str], 
+                     title: str, save_path: str = None, 
+                     normalize: bool = False, 
+                     figsize: tuple[int, int] = (8, 6), 
+                     xticks_rotation: int = 45) -> Figure:
     """
     Plot and optionally save a confusion matrix.
-
-    Args:
-        cm (np.ndarray): Confusion matrix.
-        labels (list): List of class names.
-        title (str): Title of the plot.
-        save_path (str): File path to save the plot (e.g., .png, .svg).
-        normalize (bool): Whether to normalize the confusion matrix.
-        figsize (tuple): Size of the figure.
-        xticks_rotation (int): Rotation angle for x-axis tick labels.
-
-    Returns:
-        matplotlib.figure.Figure: The figure object.
     """
     counts = cm.astype(int)
     percentages = cm.astype('float') / (cm.sum(axis=1, keepdims=True) + 1e-6) * 100
@@ -45,14 +38,9 @@ def plot_conf_matrix(cm, labels, title, save_path=None, normalize=False, figsize
     return fig
 
 
-def visualize_uncertainty(logvars: torch.Tensor, emotion_labels=None, save_path=None):
+def visualize_uncertainty(logvars: torch.Tensor, emotion_labels: list[str] = None, save_path: str = None) -> None:
     """
     Visualize log-variance (uncertainty) as a heatmap for emotion predictions using seaborn.
-
-    Args:
-        logvars (torch.Tensor): Log-variance tensor of shape (batch_size, num_emotions)
-        emotion_labels (List[str], optional): List of emotion labels.
-        save_path (str, optional): If provided, saves the figure to this path.
     """
     logvars = logvars.detach().cpu().numpy()
     batch_size, num_emotions = logvars.shape

@@ -1,27 +1,10 @@
-from typing import Dict, List, Any
-
-
 class MetricManager:
-    """
-    Wrapper for evaluating multiple metrics.
-
-    Args:
-        metrics (List[Any]): List of metric instances.
-    """
-    def __init__(self, metrics: List[Any]):
+    """Wrapper for evaluating multiple metrics."""
+    def __init__(self, metrics: list[any]) -> None:
         self.metrics = metrics
 
-    def calculate_all(self, targets: Dict[str, Any], predicts: Dict[str, Any]) -> Dict[str, float]:
-        """
-        Calculate all metrics for corresponding tasks.
-
-        Args:
-            targets (Dict[str, Any]): Ground truth labels.
-            predicts (Dict[str, Any]): Model predicts.
-
-        Returns:
-            Dict[str, float]: Computed metrics.
-        """
+    def calculate_all(self, targets: dict[str, any], predicts: dict[str, any]) -> dict[str, float]:
+        """Calculate all metrics for corresponding tasks."""
         results = {}
         for metric in self.metrics:
             task = metric.task
