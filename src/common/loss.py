@@ -246,6 +246,78 @@ class EmotionNLLLossStable(nn.Module):
             self.loss_values[task] = task_loss
 
         return total_loss
+    
+
+class VAEEmotionNLLLossStable(nn.Module):
+    """
+    Numerically stable loss function for emotion classification using soft labels and uncertainty modeling.
+    Avoids collapse due to extreme logvars and includes optional kl-penalty and label smoothing.
+    """
+    def __init__(self,
+                 class_weights: dict[str, torch.Tensor] | None = None,
+                 use_soft_labels: bool = True,
+                 clamp_logvar: bool = True,
+                 logvar_clamp_range: tuple[float, float] = (-3.0, 3.0),
+                 logvar_reg_weight: float = 0.01,
+                 kl_weight: float = 0.5,
+                 label_smoothing: float = 0.1) -> None:
+        super().__init__()
+        self.class_weights = class_weights or {}
+        self.use_soft_labels = use_soft_labels
+        self.clamp_logvar = clamp_logvar
+        self.logvar_clamp_range = logvar_clamp_range
+        self.logvar_reg_weight = logvar_reg_weight
+        self.kl_weight = kl_weight
+        self.label_smoothing = label_smoothing
+
+        self.loss_values = {}
+
+    def set_warmup_mode(self,
+                        is_warmup: bool):
+        self.use_soft_labels = is_warmup
+        self.label_smoothing = 0.2 if is_warmup else 0.0
+        self.kl_weight = 0.01 if is_warmup else 0.5
+
+    def forward(self, 
+                outputs: dict[str, torch.Tensor], 
+                targets: dict[str, torch.Tensor]) -> torch.Tensor:
+        
+        mu = outputs["mu"]
+        logvar = outputs["logvar"]
+        z = outputs["z"]
+        probs = F.softmax(z / 1.5, dim=-1)
+
+        if self.clamp_logvar:
+            logvar = logvar.clamp(*self.logvar_clamp_range)
+
+        total_loss = 0.0
+
+        for task, target in targets.items():
+            if task in self.class_weights:
+                weights = self.class_weights[task].to(mu.device)
+                target = target * weights.unsqueeze(0)
+
+            if self.label_smoothing > 0:
+                target = target * (1 - self.label_smoothing) + self.label_smoothing / target.size(-1)
+
+            if self.use_soft_labels:
+                # Use z (sampled) instead of mu
+                loss_nll = F.kl_div(probs.log(), target, reduction="batchmean")
+            else:
+                hard_target = target.argmax(dim=-1)
+                loss_nll = F.cross_entropy(z, hard_target)
+
+            # KL divergence to N(0, I)
+            kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1).mean()
+
+            # Regularization on logvar itself to prevent exploding uncertainty
+            logvar_penalty = torch.mean(logvar ** 2)
+
+            task_loss = loss_nll + self.kl_weight * kl_div + self.logvar_reg_weight * logvar_penalty
+            total_loss += task_loss
+            self.loss_values[task] = task_loss
+
+        return total_loss
 
 
 class EmotionFocalLossStable(nn.Module):

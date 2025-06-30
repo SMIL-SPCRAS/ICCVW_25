@@ -7,11 +7,12 @@ import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-from audio.trainer.loss_manager import LossManager
-from audio.trainer.evaluator import Evaluator
-from audio.utils.mlflow_logger import MLflowLogger
-from audio.utils.utils import log_logvar, log_mu_statistics
-from audio.utils.schedulers import UnfreezeScheduler
+from common.trainer.loss_manager import LossManager
+from common.trainer.evaluator import Evaluator
+from common.mlflow_logger import MLflowLogger
+from common.utils.utils import log_logvar, log_mu_statistics, move_to_device
+from common.schedulers import UnfreezeScheduler
+
 
 class Trainer:
     """
@@ -50,25 +51,9 @@ class Trainer:
 
         self.history = defaultdict(dict)
 
-    def _apply_unfreeze_schedule(self, epoch: int) -> None:
-        if epoch in self.unfreeze_schedule:
-            for name, module in self.model.named_modules():
-                for target in self.unfreeze_schedule[epoch]:
-                    if target in name and name not in self.frozen_modules:
-                        for param in module.parameters():
-                            param.requires_grad = True
-                        self.logger.info(f"Unfroze module: {name}")
-                        self.frozen_modules.add(name)
-
     def _run_epoch(self, dataloader: DataLoader, epoch: int, phase: str) -> dict[str, any]:
         is_train = phase == 'train'
         self.model.train() if is_train else self.model.eval()
-
-        if self.unfreeze_scheduler and is_train:
-            self.unfreeze_scheduler.apply(epoch)
-
-        if self.unfreeze_scheduler and hasattr(self.loss_fn, 'set_warmup_mode'):
-            self.loss_fn.set_warmup_mode(self.unfreeze_scheduler.is_warming_up(epoch))
 
         loss_tracker = LossManager()
         for task in self.final_activations:
@@ -80,8 +65,9 @@ class Trainer:
         loop = tqdm(dataloader, desc=f"{phase} epoch {epoch}", leave=False)
         for batch in loop:
             inputs, labels, metas = batch
-            inputs = inputs.to(self.device)
-            labels = {k: v.to(self.device) for k, v in labels.items()}
+            
+            inputs = move_to_device(inputs, self.device)
+            labels = move_to_device(labels, self.device)
 
             with torch.set_grad_enabled(is_train):
                 outputs = self.model(inputs)
@@ -93,7 +79,7 @@ class Trainer:
                     if self.scheduler:
                         self.scheduler.step()
 
-            batch_size = inputs.size(0)
+            batch_size = len(metas)
             for task, val in self.loss_fn.loss_values.items():
                 loss_tracker.update({task: val.item()}, batch_size)
 
@@ -121,18 +107,6 @@ class Trainer:
         self.logger.info("=" * 80)
         loss_str = " | ".join([f"{task} Loss = {mean_losses[task]:.3f}" for task in mean_losses])
         self.logger.info(f"[Epoch {epoch}] {'🔁' if is_train else '🔍'} {phase.upper()}: Total Loss = {total_loss:.3f} | {loss_str}")
-        
-        if self.ml_logger:
-            log_logvar(self.logger, self.ml_logger, self.plot_dir, outputs, epoch, phase)
-        
-        if epoch % 5 == 0 and "mu" in outputs and self.ml_logger:
-            log_mu_statistics(
-                outputs["mu"], labels["emo"],
-                epoch=epoch, phase=phase,
-                logger=self.logger,
-                ml_logger=self.ml_logger,
-                plot_dir=self.plot_dir
-            )
         
         self.history[epoch][f"{phase}_loss"] = total_loss
         self.history[epoch][f"{phase}_lr"] = lr
@@ -178,7 +152,7 @@ class Trainer:
                 inputs = inputs.to(self.device)
                 outputs = self.model(inputs)
 
-                for task in outputs:
+                for task in self.final_activations:
                     predicts = self.final_activations[task](outputs[task])
                     all_predicts[task].extend(predicts.cpu().numpy())
                     all_targets[task].extend(targets[task].detach().cpu().numpy())

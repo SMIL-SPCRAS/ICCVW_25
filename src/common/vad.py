@@ -1,5 +1,3 @@
-# src/audio/utils/silero_vad.py
-
 import torch
 
 

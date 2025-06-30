@@ -5,7 +5,7 @@ sys.path.append('src')
 import subprocess
 from tqdm import tqdm
 
-from audio.utils.utils import load_config
+from common.utils.utils import load_config
 
 
 def extract_audio_ffmpeg(video_path: str, audio_path: str, config: dict[str, any]) -> None:

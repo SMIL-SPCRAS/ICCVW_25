@@ -4,9 +4,9 @@ import numpy as np
 from matplotlib.figure import Figure
 from sklearn.metrics import confusion_matrix
 
-from audio.trainer.visualize import plot_conf_matrix
-from audio.trainer.metric_manager import MetricManager
-from audio.utils.mlflow_logger import MLflowLogger
+from common.trainer.visualize import plot_conf_matrix
+from common.trainer.metric_manager import MetricManager
+from common.mlflow_logger import MLflowLogger
 
 
 class Evaluator:

@@ -1,4 +1,4 @@
-from audio.trainer.trainer import Trainer
+from common.trainer.trainer import Trainer
 
 
 class EarlyStopping:

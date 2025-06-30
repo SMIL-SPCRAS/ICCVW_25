@@ -6,16 +6,18 @@ import torch
 
 sys.path.append('src')
 
-from audio.utils.factories import create_dataloaders, create_scheduler, create_metrics
+from common.utils.factories import create_scheduler, create_metrics
+from common.trainer.trainer import Trainer
+from common.trainer.early_stopping import EarlyStopping
+from common.trainer.metric_manager import MetricManager
+from common.trainer.evaluator import Evaluator
+from common.utils.utils import load_config, define_seed, setup_directories, \
+    setup_logging, is_debugging, wait_for_it
+from common.loss import MultiHeadFocalLoss
+from common.mlflow_logger import MLflowLogger
+
+from audio.data.utils import create_dataloaders, compute_class_weights
 from audio.models.multihead_models import *
-from audio.trainer.trainer import Trainer
-from audio.trainer.early_stopping import EarlyStopping
-from audio.trainer.metric_manager import MetricManager
-from audio.trainer.evaluator import Evaluator
-from audio.utils.utils import load_config, define_seed, setup_directories, \
-    setup_logging, compute_class_weights, is_debugging, wait_for_it
-from audio.utils.loss import MultiHeadFocalLoss
-from audio.utils.mlflow_logger import MLflowLogger
 from audio.data.collate import speech_only_collate_fn
 
 

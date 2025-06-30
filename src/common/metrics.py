@@ -1,6 +1,5 @@
 import numpy as np
 from sklearn.metrics import f1_score, recall_score
-from typing import Any
 
 
 class UAR:
@@ -8,7 +7,7 @@ class UAR:
     def __init__(self, task: str) -> None:
         self.task = task
 
-    def calc(self, y_true: Any, y_pred: Any) -> float:
+    def calc(self, y_true: any, y_pred: any) -> float:
         y_true_arr = np.asarray(y_true)
         y_pred_arr = np.asarray(y_pred)
 
@@ -28,7 +27,7 @@ class MacroF1:
     def __init__(self, task: str) -> None:
         self.task = task
 
-    def calc(self, y_true: Any, y_pred: Any) -> float:
+    def calc(self, y_true: any, y_pred: any) -> float:
         y_true_arr = np.asarray(y_true)
         y_pred_arr = np.asarray(y_pred)
 

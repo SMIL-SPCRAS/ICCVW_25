@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import AutoFeatureExtractor, AutoModel
-from transformers import WhisperModel
-from transformers import WhisperConfig, WhisperModel
+
 
 class AttentionPooling(nn.Module):
     def __init__(self, input_dim: int) -> None:
@@ -120,6 +119,18 @@ class MultiHeadWhisperEmotionClassifier(nn.Module):
             )
             for _ in range(num_heads)
         ])
+
+    def extract_features(self, waveform: torch.Tensor) -> torch.Tensor:
+        if waveform.ndim == 3:
+            waveform = waveform.squeeze(1)
+
+        with torch.no_grad():
+            outputs = self.encoder(waveform, output_hidden_states=False, return_dict=True)
+            features = outputs.last_hidden_state  # (B, T, D)
+            features = self.sequence_model(features)  # BiLSTM + residual
+            pooled = self.pooling(features)  # attention pooling
+        
+        return pooled  # (B, D)
 
     def forward(self, input_features: torch.Tensor) -> dict[str, torch.Tensor]:
         hidden = self.encoder(input_features).last_hidden_state  # (B, T, D)

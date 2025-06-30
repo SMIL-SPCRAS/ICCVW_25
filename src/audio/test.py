@@ -9,11 +9,12 @@ import torch
 
 sys.path.append('src')
 
-from audio.utils.utils import load_config, define_seed
+from common.utils.utils import load_config, define_seed
 from audio.models.models import WavLMEmotionClassifierV4
-from audio.models.multihead_models import MultiHeadWavLMEmotionClassifier
-from audio.trainer.trainer import Trainer
-from audio.utils.factories import create_dataloaders
+from audio.models.vae_models import WavLMEmotionClassifierV5
+from audio.models.multihead_models import MultiHeadWhisperEmotionClassifier
+from common.trainer.trainer import Trainer
+from audio.data.utils import create_dataloaders
 
 
 class DummyLogger:
@@ -31,7 +32,8 @@ def main(cfg: dict[str, any], experiment_info: dict[str, any]) -> None:
     logger = DummyLogger()
     logger.info(f"🧪 Running evaluation for saved model")
     
-    dataloaders = create_dataloaders(cfg)
+    dataloaders = create_dataloaders(cfg, 
+                                     processor_name=cfg['pretrained_model'] if 'whisper' in cfg['pretrained_model'] else None)
 
     model = experiment_info["model"].to(torch.device(cfg["device"]))
 
@@ -46,7 +48,8 @@ def main(cfg: dict[str, any], experiment_info: dict[str, any]) -> None:
         log_dir='',
         plot_dir='',
         checkpoint_dir='',
-        final_activations={"emo": torch.nn.Softmax(dim=-1)},
+        # final_activations={"emo": torch.nn.Softmax(dim=-1)},
+        final_activations={"emo": lambda x: x},
         ml_logger=None
     )
 
@@ -103,29 +106,63 @@ def main(cfg: dict[str, any], experiment_info: dict[str, any]) -> None:
 if __name__ == "__main__":
     cfg = load_config("audio_config.yaml")
 
-    experiment_info = {
-        "experiment_name": "run_20250624_103834",
-        "checkpoint_name": "checkpoint_epoch_8.pt",
-        "model": WavLMEmotionClassifierV4(
-            pretrained_model_name=cfg["pretrained_model"],
-            num_emotions=len(cfg["emotion_labels"])
-        )
-    }
-
-    experiment_info = {
-        "experiment_name": "run_20250625_074112",
-        "checkpoint_name": "checkpoint_epoch_14.pt",
-        "model": MultiHeadWavLMEmotionClassifier(
-            pretrained_model_name=cfg["pretrained_model"],
-            num_emotions=len(cfg["emotion_labels"]),
-            num_heads=3
-        )
-    }
-
-    main(cfg, experiment_info)
-
+    # 8 classes, CMU, MELD
     # run_20250624_103834, epoch 8 + 
-    # run_20250620_111218, epoch 13
-    # run_20250625_074112, epoch 14
+    
+    # 8 classes
+    # run_20250626_171326, epoch 5
+    # run_20250626_140651, epoch 25 - Uncert Head
 
-    # + last 4
+    # 7 classes
+    # run_20250626_023120, epoch 27 - Uncert Head
+
+    exps = [
+        # {
+        #     "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_8classes",
+        #     "experiment_name": "run_20250624_103834",
+        #     "checkpoint_name": "checkpoint_epoch_8.pt",
+        #     "pretrained_model": "microsoft/wavlm-base-plus-sd",
+        #     "model": WavLMEmotionClassifierV4(
+        #         pretrained_model_name="microsoft/wavlm-base-plus-sd",
+        #         num_emotions=len(cfg["emotion_labels"])
+        #     )
+        # },
+        # {
+        #     "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_8classes", # whisper
+        #     "experiment_name": "run_20250626_171326",
+        #     "checkpoint_name": "checkpoint_epoch_5.pt",
+        #     "pretrained_model": "openai/whisper-small",
+        #     "model": MultiHeadWhisperEmotionClassifier(
+        #         pretrained_model_name="openai/whisper-small",
+        #         num_emotions=len(cfg["emotion_labels"]),
+        #         num_heads=3,
+        #         max_position=200
+        #     )
+        # },
+        {
+            "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_8classes",
+            "experiment_name": "run_20250626_140651",
+            "checkpoint_name": "checkpoint_epoch_25.pt",
+            "pretrained_model": "microsoft/wavlm-base-plus-sd",
+            "model": WavLMEmotionClassifierV5(
+                pretrained_model_name="microsoft/wavlm-base-plus-sd",
+                num_emotions=len(cfg["emotion_labels"]),
+            )
+        },
+        {
+            "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_7classes",
+            "experiment_name": "run_20250626_023120",
+            "checkpoint_name": "checkpoint_epoch_27.pt",
+            "pretrained_model": "microsoft/wavlm-base-plus-sd",
+            "model": WavLMEmotionClassifierV5(
+                pretrained_model_name="microsoft/wavlm-base-plus-sd",
+                num_emotions=len(cfg["emotion_labels"]) - 1,
+            )
+        }
+    ]
+    
+    for experiment_info in exps:
+        cfg["log_root"] = experiment_info["log_root"]
+        cfg["pretrained_model"] = experiment_info["pretrained_model"]
+
+        main(cfg, experiment_info)

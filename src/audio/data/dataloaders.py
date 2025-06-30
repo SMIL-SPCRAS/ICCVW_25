@@ -6,7 +6,7 @@ import torchaudio
 
 from transformers import AutoProcessor
 
-from audio.utils.vad import SileroVAD
+from common.vad import SileroVAD
 
 
 class AudioEmotionDataset(Dataset):

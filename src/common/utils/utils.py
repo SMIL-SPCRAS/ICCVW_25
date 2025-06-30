@@ -3,19 +3,17 @@ import sys
 import time
 import random
 import logging
-from collections import Counter
 
 import yaml
 import torch
 import numpy as np
-from torch.utils.data import DataLoader, ConcatDataset
 import mlflow
 
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-from audio.utils.mlflow_logger import MLflowLogger
+from common.mlflow_logger import MLflowLogger
 
 
 def load_config(config_path: str) -> dict[str, any]:
@@ -41,47 +39,7 @@ def wait_for_it(time_left: int) -> None:
         print("Time left: {0}".format(t))
         time.sleep(60) 
         t = t - 1
-
-
-def compute_class_weights(
-    dataloader: DataLoader,
-    emotion_labels: list[str],
-    logger: any = None) -> torch.Tensor:
-    """Computes class weights for a multi-class classification task."""
-    counts = Counter()
-    dataset = dataloader.dataset
-    num_classes = len(emotion_labels)
-
-    if isinstance(dataset, ConcatDataset):
-        for subds in dataset.datasets:
-            if hasattr(subds, "df") and hasattr(subds, "emotion_labels"):
-                df = subds.df
-                labels = df[emotion_labels].values
-                indices = labels.argmax(axis=1)
-                counts.update(indices.tolist())
-    elif hasattr(dataset, "df") and hasattr(dataset, "emotion_labels"):
-        df = dataset.df
-        labels = df[emotion_labels].values
-        indices = labels.argmax(axis=1)
-        counts.update(indices.tolist())
-    else:
-        for _, labels, _ in dataloader:
-            for label in labels["emo"]:
-                label_idx = label.argmax().item() if label.ndim >= 1 else label.item()
-                counts[label_idx] += 1
-
-    total = sum(counts.values())
-    if logger:
-        logger.info("📊 Class distribution:")
-        for i in range(num_classes):
-            count = counts.get(i, 0)
-            logger.info(f"  Class {i}: {count} samples ({(count / total * 100):.2f}%)")
-
-    weights = [total / counts.get(i, 1) for i in range(num_classes)]
-    weights_tensor = torch.tensor(weights, dtype=torch.float)
-    weights_tensor = weights_tensor / weights_tensor.sum() * num_classes
-    return weights_tensor
-
+        
 
 def is_debugging() -> bool:
     gettrace = getattr(sys, 'gettrace', None)
@@ -199,4 +157,12 @@ def log_mu_statistics(mu: torch.Tensor,
             ml_logger.log_artifact(save_path, artifact_path=f"plots/{phase}/mu_hist_epoch_{epoch}")
 
 
-
+def move_to_device(obj: any, device: torch.device) -> any:
+    if isinstance(obj, torch.Tensor):
+        return obj.to(device)
+    elif isinstance(obj, dict):
+        return {k: move_to_device(v, device) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return type(obj)(move_to_device(v, device) for v in obj)
+    else:
+        return obj

@@ -1,32 +1,33 @@
 import os
 import sys
+import itertools
 from datetime import datetime
 
 import torch
 
 sys.path.append('src')
 
-from common.trainer.vae_trainer import Trainer
+from common.utils.factories import create_scheduler, create_metrics
+from common.loss import SoftFocalLoss
+from common.mlflow_logger import MLflowLogger
+from common.trainer.trainer import Trainer
 from common.trainer.early_stopping import EarlyStopping
 from common.trainer.metric_manager import MetricManager
 from common.trainer.evaluator import Evaluator
 from common.utils.utils import load_config, define_seed, setup_directories, \
     setup_logging, is_debugging, wait_for_it
-from common.loss import EmotionNLLLossStable
-from common.mlflow_logger import MLflowLogger
-from common.schedulers import UnfreezeScheduler
 
-from audio.data.utils import create_dataloaders, compute_class_weights
-from audio.data.collate import speech_only_collate_fn
-from audio.models.vae_models import *
+from fusion.models.multimodal_models import *
+from fusion.data.utils import compute_class_weights, create_dataloaders
+from fusion.data.collate import multimodal_collate_fn
 
 
-def main(cfg: dict[str, any], debug: bool = False) -> None:
+def main(cfg: dict[str, any], model_cls: torch.nn.Module, debug: bool = False) -> None:
     define_seed(42)
     run_name = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     log_dir, plot_dir, checkpoint_dir = setup_directories(cfg, run_name, debug)
     logger = setup_logging(log_dir)
-    
+
     ml_logger = None
     if not debug:
         ml_logger = MLflowLogger(
@@ -35,24 +36,29 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
             config=cfg,
             artifact_dir="src"
         )
+
+        ml_logger.log_param("model_name", cfg['model_name'])
+        ml_logger.log_param("modalities", ",".join(cfg['modalities']))
+        ml_logger.set_description(f"Modalities: {', '.join(cfg['modalities'])}")
     
     logger.info(f"🚀 Starting run: {run_name}")
     logger.info(f"📸 Logging to: {log_dir}")
-    logger.info(f"💅 Model: {cfg['pretrained_model']}")
+    logger.info(f"💅 Modalities: {cfg['modalities']}")
+    logger.info(f"💥 Model: {cfg['model_name']}")
     logger.info(f"👠 Scheduler: {cfg['scheduler_type']}")
 
-    dataloaders = create_dataloaders(cfg, collate_fn=speech_only_collate_fn)
+    dataloaders = create_dataloaders(cfg, collate_fn=multimodal_collate_fn)
 
-    model = WavLMEmotionClassifierV5(
-        pretrained_model_name=cfg["pretrained_model"],
+    model = model_cls(
+        modality_dims=cfg["modalities"],
         num_emotions=len(cfg["emotion_labels"])
     ).to(torch.device(cfg["device"]))
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"])
     scheduler = create_scheduler(cfg, optimizer)
 
-    class_weights = compute_class_weights(dataloaders["train"], cfg["emotion_labels"], logger=logger)
-    loss_fn = EmotionNLLLossStable(class_weights={"emo": class_weights})
+    class_weights = compute_class_weights(dataloaders["train"], logger=logger)
+    loss_fn = SoftFocalLoss(class_weights={"emo": class_weights}, gamma=2.0, label_smoothing=0.1) #
 
     metrics = create_metrics(cfg)
     metric_manager = MetricManager(metrics)
@@ -62,20 +68,6 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         logger=logger,
         plot_dir=plot_dir,
         ml_logger=ml_logger
-    )
-
-    unfreeze_scheduler = UnfreezeScheduler(
-        model=model, 
-        logger=logger,
-        schedule={
-            2: ['encoder.layers.6'],
-            3: ['encoder.layers.7'],
-            4: ['encoder.layers.8'],
-            5: ['encoder.layers.9'],
-            6: ['encoder.layers.10'],
-            7: ['encoder.layers.11'],
-            8: ['projector', 'layernorm']
-        }
     )
 
     trainer = Trainer(
@@ -89,9 +81,8 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         log_dir=log_dir,
         plot_dir=plot_dir,
         checkpoint_dir=checkpoint_dir,
-        final_activations={"emo": lambda x: x},
-        ml_logger=ml_logger,
-        unfreeze_scheduler=unfreeze_scheduler
+        final_activations={"emo": torch.nn.Softmax(dim=1)},
+        ml_logger=ml_logger
     )
 
     early_stopper = EarlyStopping(
@@ -121,7 +112,30 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         ml_logger.end()
 
 
+def run_experiments(cfg: dict[str, any], debug: bool = False) -> None:
+    original_modalities = dict(cfg["modalities"])
+    all_modalities = list(cfg["modalities"].keys())
+    all_combos = [combo for r in range(2, 7) for combo in itertools.combinations(all_modalities, r)]
+    model_classes = {
+        "EmotionFusionModelV1": EmotionFusionModelV1,
+        "EmotionFusionModelV2": EmotionFusionModelV2
+    }
+
+    for combo in all_combos:
+        combo_dims = {mod: original_modalities[mod] for mod in combo}
+        for model_name, model_cls in model_classes.items():
+            cfg["modalities"] = combo_dims
+            cfg["model_name"] = model_name
+
+            try:
+                main(cfg, model_cls, debug=debug)
+            except Exception as e:
+                print(f"❌ Experiment failed with error: {e}")
+                
+
 if __name__ == "__main__":
-    cfg = load_config("audio_config_vae.yaml")
+    # wait_for_it(4 * 60)
+    cfg = load_config("multimodal_config.yaml")
     debug = is_debugging()
-    main(cfg, debug=debug)
+    # main(cfg, debug=debug)
+    run_experiments(cfg, debug)
