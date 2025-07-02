@@ -47,11 +47,21 @@ def is_debugging() -> bool:
 
 
 def setup_logging(log_dir: str) -> any:
-    logging.basicConfig(level=logging.INFO, handlers=[
-        logging.FileHandler(os.path.join(log_dir, "train.log")),
-        logging.StreamHandler()
-    ])
-    return logging.getLogger("train")
+    logger = logging.getLogger("train")
+    logger.setLevel(logging.INFO)
+
+    # Очистка старых хендлеров
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    
+    file_handler = logging.FileHandler(os.path.join(log_dir, "train.log"))
+    stream_handler = logging.StreamHandler()
+
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return logger
 
 
 def setup_directories(cfg: dict[any], run_name: str, debug: bool = False) -> tuple[str, str, str]:

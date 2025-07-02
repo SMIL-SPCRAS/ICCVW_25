@@ -1,11 +1,12 @@
 from collections import defaultdict
 import torch
 
-def multimodal_collate_fn(batch: list[tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, any]]]) \
-    -> list[tuple[torch.Tensor, dict[str, torch.Tensor], dict[str, any]]]:
+def multimodal_collate_fn(batch: list[tuple[dict[str, torch.Tensor], dict[str, torch.Tensor], dict[str, any]]]) \
+        -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor], dict[str, list]]:
     """
     Collate function that merges variable modality inputs into batched tensors.
     Each item in batch: (features: dict[str, Tensor], targets: dict[str, Tensor], meta: dict)
+    Filters out 'audio' features if meta['has_speech'] is False.
     """
     all_modalities = set()
     for sample in batch:
@@ -24,11 +25,14 @@ def multimodal_collate_fn(batch: list[tuple[torch.Tensor, dict[str, torch.Tensor
 
     for feat_dict, target_dict, meta in batch:
         for mod in all_modalities:
+            # if mod == 'audio' and not meta.get('has_speech', True):
+                # features[mod].append(torch.zeros(feature_dims[mod]))
+            # el
             if mod in feat_dict:
                 features[mod].append(feat_dict[mod])
             else:
                 features[mod].append(torch.zeros(feature_dims[mod]))
-        
+
         targets["emo"].append(target_dict["emo"])
         metas.append(meta)
 
@@ -38,5 +42,5 @@ def multimodal_collate_fn(batch: list[tuple[torch.Tensor, dict[str, torch.Tensor
     for meta in metas:
         for k, v in meta.items():
             batched_metas[k].append(v)
-        
+
     return batched_features, batched_targets, batched_metas

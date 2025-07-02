@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 
 import torch
@@ -11,11 +12,14 @@ def create_dataloaders(cfg: dict[str, any],
     datasets = defaultdict(list)
 
     for db_name, subsets in cfg["databases"].items():
-        for idx, subset in enumerate(subsets):
+        for subset, metadata_filename in subsets.items():
+            csv_path = os.path.join(cfg["output_audio_dir"], db_name, metadata_filename)
             dataset = MultimodalEmotionDataset(
+                csv_path=csv_path,
                 features_dir=cfg["features_dir"],
                 db=db_name,
                 subset=subset,
+                emotion_labels=cfg["emotion_labels"],
                 modalities=list(cfg["modalities"].keys())
             )
 

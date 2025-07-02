@@ -30,6 +30,12 @@ class MLflowLogger:
         for key, value in metrics.items():
             mlflow.log_metric(key, value, step=step)
 
+    def log_param(self, param: str, value: any) -> None:
+        if not self.active:
+            return
+        
+        mlflow.log_param(param, value)
+
     def log_artifact(self, filepath: str, artifact_path: str = None) -> None:
         if not self.active:
             return

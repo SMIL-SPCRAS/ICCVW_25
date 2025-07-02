@@ -15,6 +15,7 @@ from common.utils.utils import load_config, define_seed, setup_directories, \
 from common.loss import EmotionNLLLossStable
 from common.mlflow_logger import MLflowLogger
 from common.schedulers import UnfreezeScheduler
+from common.utils.factories import create_metrics, create_scheduler
 
 from audio.data.utils import create_dataloaders, compute_class_weights
 from audio.data.collate import speech_only_collate_fn
@@ -113,7 +114,7 @@ def main(cfg: dict[str, any], debug: bool = False) -> None:
         else:
             logger.info(f"[Epoch {epoch}] Wait counter: {early_stopper.patience - early_stopper.counter} epochs left before early stop")
 
-    logger.info("Training complete")
+    logger.info("🌋Training complete")
     trainer.save_metrics(os.path.join(log_dir, "metrics.csv"))
 
     if ml_logger:

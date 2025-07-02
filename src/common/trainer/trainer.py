@@ -149,7 +149,7 @@ class Trainer:
         with torch.no_grad():
             for batch in tqdm(dataloader):
                 inputs, targets, metas = batch
-                inputs = inputs.to(self.device)
+                inputs = move_to_device(inputs, self.device)
                 outputs = self.model(inputs)
 
                 for task in self.final_activations:
@@ -161,7 +161,7 @@ class Trainer:
                     feats = self.model.extract_features(inputs)
                     all_features.extend(feats.cpu().numpy())
 
-                for i in range(inputs.shape[0]):
+                for i in range(len(metas['db'])):
                     meta_entry = {k: metas[k][i] for k in metas}
 
                     # has_speech: Tensor → bool

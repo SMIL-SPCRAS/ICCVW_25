@@ -16,6 +16,7 @@ from common.trainer.metric_manager import MetricManager
 from common.trainer.evaluator import Evaluator
 from common.utils.utils import load_config, define_seed, setup_directories, \
     setup_logging, is_debugging, wait_for_it
+from common.telegram_notifier import TelegramNotifier
 
 from fusion.models.multimodal_models import *
 from fusion.data.utils import compute_class_weights, create_dataloaders
@@ -28,6 +29,8 @@ def main(cfg: dict[str, any], model_cls: torch.nn.Module, debug: bool = False) -
     log_dir, plot_dir, checkpoint_dir = setup_directories(cfg, run_name, debug)
     logger = setup_logging(log_dir)
 
+    telegram_notifier = TelegramNotifier(cfg)
+
     ml_logger = None
     if not debug:
         ml_logger = MLflowLogger(
@@ -36,10 +39,6 @@ def main(cfg: dict[str, any], model_cls: torch.nn.Module, debug: bool = False) -
             config=cfg,
             artifact_dir="src"
         )
-
-        ml_logger.log_param("model_name", cfg['model_name'])
-        ml_logger.log_param("modalities", ",".join(cfg['modalities']))
-        ml_logger.set_description(f"Modalities: {', '.join(cfg['modalities'])}")
     
     logger.info(f"🚀 Starting run: {run_name}")
     logger.info(f"📸 Logging to: {log_dir}")
@@ -104,7 +103,8 @@ def main(cfg: dict[str, any], model_cls: torch.nn.Module, debug: bool = False) -
         else:
             logger.info(f"[Epoch {epoch}] Wait counter: {early_stopper.patience - early_stopper.counter} epochs left before early stop")
 
-    logger.info("Training complete")
+    logger.info("🌋Training complete")
+    telegram_notifier.send(f"🧪Experiment {run_name} completed")
     trainer.save_metrics(os.path.join(log_dir, "metrics.csv"))
 
     if ml_logger:
@@ -114,14 +114,14 @@ def main(cfg: dict[str, any], model_cls: torch.nn.Module, debug: bool = False) -
 
 def run_experiments(cfg: dict[str, any], debug: bool = False) -> None:
     original_modalities = dict(cfg["modalities"])
+    cfg["databases"].pop("C-EXPR-DB", None)
     all_modalities = list(cfg["modalities"].keys())
     all_combos = [combo for r in range(2, 7) for combo in itertools.combinations(all_modalities, r)]
     model_classes = {
-        "EmotionFusionModelV1": EmotionFusionModelV1,
-        "EmotionFusionModelV2": EmotionFusionModelV2
+        "EmotionFusionModelV3": EmotionFusionModelV3,
     }
 
-    for combo in all_combos:
+    for combo in all_combos:        
         combo_dims = {mod: original_modalities[mod] for mod in combo}
         for model_name, model_cls in model_classes.items():
             cfg["modalities"] = combo_dims
@@ -137,5 +137,4 @@ if __name__ == "__main__":
     # wait_for_it(4 * 60)
     cfg = load_config("multimodal_config.yaml")
     debug = is_debugging()
-    # main(cfg, debug=debug)
     run_experiments(cfg, debug)
