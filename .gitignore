@@ -172,5 +172,7 @@ dmypy.json
 
 # Configuration files
 *.yaml
+!example_config.yaml
+!config.yaml
 mlruns/
 *.code-workspace

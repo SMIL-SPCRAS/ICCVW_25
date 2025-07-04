@@ -167,6 +167,36 @@ class EmotionFusionModelV3(nn.Module):
             nn.Linear(hidden_dim, num_emotions)
         )
 
+    def extract_features(self, features: dict[str, torch.Tensor]) -> torch.Tensor:
+        batch_size = next(iter(features.values())).shape[0]
+        device = next(iter(features.values())).device
+
+        tokens = []
+        key_padding_mask = []
+
+        for mod in self.modalities:
+            mod_tensor = features[mod]  # [B, D]
+            is_missing = (mod_tensor == 0).all(dim=-1)  # [B]
+            key_padding_mask.append(is_missing)
+
+            token = self.token_encoders[mod](mod_tensor)
+            tokens.append(token.unsqueeze(1))
+
+        token_seq = torch.cat(tokens, dim=1)  # [B, M, H]
+        mask_tensor = torch.stack(key_padding_mask, dim=1)  # [B, M]
+
+        query = self.query_token.expand(batch_size, 1, -1)  # [B, 1, H]
+        x = torch.cat([query, token_seq], dim=1)  # [B, 1+M, H]
+
+        padding_mask = torch.cat([
+            torch.zeros(batch_size, 1, dtype=torch.bool, device=device),
+            mask_tensor
+        ], dim=1)
+
+        x = self.transformer(x, src_key_padding_mask=padding_mask)
+
+        return x[:, 0]  # [B, hidden_dim] – fused emotion feature
+
     def forward(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         batch_size = next(iter(features.values())).shape[0]
         device = next(iter(features.values())).device
@@ -194,5 +224,94 @@ class EmotionFusionModelV3(nn.Module):
         x = self.transformer(x, src_key_padding_mask=padding_mask)
         emo_logits = self.classifier(x[:, 0])
         return {'emo': emo_logits}
-
     
+
+class EmotionFusionModelV4(nn.Module):
+    def __init__(self, modality_dims: dict[str, int], num_emotions: int = 8, hidden_dim: int = 128, num_layers: int = 2, nhead: int = 4):
+        super().__init__()
+        self.scene_key = None
+
+        for key in modality_dims.keys():
+            if str(key).lower().endswith('scene'):
+                self.scene_key = str(key)
+
+        self.modalities = [m for m in modality_dims.keys() if m != self.scene_key]
+        self.token_encoders = nn.ModuleDict({
+            mod: EmotionTokenEncoder(dim, hidden_dim) for mod, dim in modality_dims.items() if mod != self.scene_key
+        })
+        self.query_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
+
+        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=nhead, batch_first=True)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        self.scene_proj = nn.Linear(modality_dims[self.scene_key], hidden_dim)
+
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(hidden_dim * 2),
+            nn.Linear(hidden_dim * 2, num_emotions)
+        )
+
+    def forward(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        batch_size = next(iter(features.values())).shape[0]
+        device = next(iter(features.values())).device
+
+        tokens = []
+        key_padding_mask = []
+
+        for mod in self.modalities:
+            mod_tensor = features[mod]  # [B, D]
+            is_missing = (mod_tensor == 0).all(dim=-1)  # [B]
+            key_padding_mask.append(is_missing)
+
+            token = self.token_encoders[mod](mod_tensor)
+            tokens.append(token.unsqueeze(1))
+
+        token_seq = torch.cat(tokens, dim=1)  # [B, M, H]
+        mask_tensor = torch.stack(key_padding_mask, dim=1)  # [B, M]
+
+        query = self.query_token.expand(batch_size, 1, -1)  # [B, 1, H]
+        x = torch.cat([query, token_seq], dim=1)  # [B, 1+M, H]
+
+        padding_mask = torch.cat([
+            torch.zeros(batch_size, 1, dtype=torch.bool, device=device),
+            mask_tensor
+        ], dim=1)
+
+        fused = self.transformer(x, src_key_padding_mask=padding_mask)[:, 0]  # [B, H]
+
+        scene_feat = features[self.scene_key]  # [B, scene_dim]
+        scene_proj = self.scene_proj(scene_feat)  # [B, H]
+
+        joint = torch.cat([fused, scene_proj], dim=-1)  # [B, 2H]
+        emo_logits = self.classifier(joint)
+        return {'emo': emo_logits}
+
+    def extract_features(self, features: dict[str, torch.Tensor]) -> torch.Tensor:
+        batch_size = next(iter(features.values())).shape[0]
+        device = next(iter(features.values())).device
+
+        tokens = []
+        key_padding_mask = []
+
+        for mod in self.modalities:
+            mod_tensor = features[mod]
+            is_missing = (mod_tensor == 0).all(dim=-1)
+            key_padding_mask.append(is_missing)
+
+            token = self.token_encoders[mod](mod_tensor)
+            tokens.append(token.unsqueeze(1))
+
+        token_seq = torch.cat(tokens, dim=1)
+        mask_tensor = torch.stack(key_padding_mask, dim=1)
+
+        query = self.query_token.expand(batch_size, 1, -1)
+        x = torch.cat([query, token_seq], dim=1)
+        padding_mask = torch.cat([
+            torch.zeros(batch_size, 1, dtype=torch.bool, device=device),
+            mask_tensor
+        ], dim=1)
+
+        fused = self.transformer(x, src_key_padding_mask=padding_mask)[:, 0]
+        scene_feat = features[self.scene_key]
+        scene_proj = self.scene_proj(scene_feat)
+        return torch.cat([fused, scene_proj], dim=-1)  # unified feature vector

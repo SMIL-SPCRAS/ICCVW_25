@@ -25,10 +25,9 @@ def multimodal_collate_fn(batch: list[tuple[dict[str, torch.Tensor], dict[str, t
 
     for feat_dict, target_dict, meta in batch:
         for mod in all_modalities:
-            # if mod == 'audio' and not meta.get('has_speech', True):
-                # features[mod].append(torch.zeros(feature_dims[mod]))
-            # el
-            if mod in feat_dict:
+            if mod == 'audio' and not meta.get('has_speech', True):
+                features[mod].append(torch.zeros(feature_dims[mod]))
+            elif mod in feat_dict:
                 features[mod].append(feat_dict[mod])
             else:
                 features[mod].append(torch.zeros(feature_dims[mod]))

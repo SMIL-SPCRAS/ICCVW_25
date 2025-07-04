@@ -75,8 +75,9 @@ def main(cfg: dict[str, any], experiment_info: dict[str, any]) -> None:
 
     for name, loader in dataloaders.items():
         logger.info(f"🔍 Predicting for {name}...")
-        result = trainer.predict(loader, return_features=True)
+        result = trainer.predict(loader, return_logits=True, return_features=True)
 
+        logits = result["logits"]
         predicts = result["predictions"]
         targets = result["targets"]
         metas = result["metas"]
@@ -85,6 +86,7 @@ def main(cfg: dict[str, any], experiment_info: dict[str, any]) -> None:
         results_by_db = defaultdict(list)
         for i in range(len(metas)):
             entry = {
+                "logits": {task: logits[task][i].tolist() for task in logits},
                 "predictions": {task: predicts[task][i].tolist() for task in predicts},
                 "targets": {task: targets[task][i].tolist() for task in targets},
                 "features": features[i] if len(features) > 0 else None,
@@ -110,7 +112,13 @@ if __name__ == "__main__":
     # cfg["modalities"] = {'audio': 256, 'video': 128, 'video_static': 512}
 
     # run_20250701_230659, epoch 34
-    cfg["modalities"] = {'audio': 256, 'clip': 512, 'scene': 1024, 'text': 512, 'video': 128, 'video_static': 512}
+    # cfg["modalities"] = {'audio': 256, 'clip': 512, 'scene': 1024, 'text': 512, 'video': 128, 'video_static': 512}
+
+    # run_20250702_191542, epoch 20
+    # cfg["modalities"] = {'audio_25': 256, 'clip': 512, 'text': 512, 'video': 128, 'video_static': 512}
+
+    # run_20250703_124236, epoch 16
+    cfg["modalities"] = {'audio_25': 256, 'clip': 512, 'text': 512, 'video': 128, 'video_static': 512, 'new_scene': 768}
 
     exps = [
         # {
@@ -122,11 +130,29 @@ if __name__ == "__main__":
         #         num_emotions=len(cfg["emotion_labels"])
         #     )
         # },
+        # {
+        #     "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_multimodal",
+        #     "experiment_name": "run_20250701_230659",
+        #     "checkpoint_name": "checkpoint_epoch_34.pt",
+        #     "model": EmotionFusionModelV1(
+        #         modality_dims=cfg["modalities"],
+        #         num_emotions=len(cfg["emotion_labels"])
+        #     )
+        # },
+        # {
+        #     "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_multimodal",
+        #     "experiment_name": "run_20250702_191542",
+        #     "checkpoint_name": "checkpoint_epoch_20.pt",
+        #     "model": EmotionFusionModelV3(
+        #         modality_dims=cfg["modalities"],
+        #         num_emotions=len(cfg["emotion_labels"])
+        #     )
+        # },
         {
             "log_root": "/media/maxim/WesternDigitalNew/9th_ABAW_multimodal",
-            "experiment_name": "run_20250701_230659",
-            "checkpoint_name": "checkpoint_epoch_34.pt",
-            "model": EmotionFusionModelV1(
+            "experiment_name": "run_20250703_124236",
+            "checkpoint_name": "checkpoint_epoch_16.pt",
+            "model": EmotionFusionModelV4(
                 modality_dims=cfg["modalities"],
                 num_emotions=len(cfg["emotion_labels"])
             )

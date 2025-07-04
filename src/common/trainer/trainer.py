@@ -138,10 +138,11 @@ class Trainer:
                 
         return result
 
-    def predict(self, dataloader: DataLoader, return_features: bool = False) -> dict[str, any]:
+    def predict(self, dataloader: DataLoader, return_logits: bool = False, return_features: bool = False) -> dict[str, any]:
         self.model.eval()
         all_predicts = defaultdict(list)
         all_targets = defaultdict(list)
+        all_logits = defaultdict(list)
 
         all_features = []
         all_metas = []
@@ -153,7 +154,9 @@ class Trainer:
                 outputs = self.model(inputs)
 
                 for task in self.final_activations:
-                    predicts = self.final_activations[task](outputs[task])
+                    logits = outputs[task]
+                    predicts = self.final_activations[task](logits)
+                    all_logits[task].extend(logits.cpu().numpy())
                     all_predicts[task].extend(predicts.cpu().numpy())
                     all_targets[task].extend(targets[task].detach().cpu().numpy())
 
@@ -176,6 +179,9 @@ class Trainer:
             "metas": all_metas
         }
         
+        if return_logits:
+            result["logits"] = {task: np.array(all_logits[task]) for task in all_logits}
+
         if return_features:
             result["features"] = all_features
 

@@ -118,10 +118,16 @@ def run_experiments(cfg: dict[str, any], debug: bool = False) -> None:
     all_modalities = list(cfg["modalities"].keys())
     all_combos = [combo for r in range(2, 7) for combo in itertools.combinations(all_modalities, r)]
     model_classes = {
-        "EmotionFusionModelV3": EmotionFusionModelV3,
+        "EmotionFusionModelV4": EmotionFusionModelV4,
     }
 
-    for combo in all_combos:        
+    all_combos = [
+        ('audio_25', 'clip', 'text', 'video', 'video_static', 'scene'),
+        ('audio_25', 'clip', 'text', 'video', 'video_static', 'new_scene')
+    ]
+
+    for combo in all_combos:
+        # if ('scene' not in combo) or ('video' not in combo) or ('video' not in combo) or ('video' not in combo):  
         combo_dims = {mod: original_modalities[mod] for mod in combo}
         for model_name, model_cls in model_classes.items():
             cfg["modalities"] = combo_dims
