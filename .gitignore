@@ -176,3 +176,8 @@ dmypy.json
 mlruns/
 *.code-workspace
 databases/
+corpora/
+main/
+sbatch/
+utils/
+out/
