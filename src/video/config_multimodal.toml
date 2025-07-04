@@ -1,0 +1,74 @@
+# ---------------------------
+# Dataset settings
+# ---------------------------
+
+[datasets.affwild2]
+task = "with_logits"
+segment = 'segment'
+base_dir = "E:/Databases/9th_ABAW/AffWild2/Chunk/"
+csv_path = "{base_dir}/{split}_segment_final_{segment}_with_scene_multimodal_logits.csv"
+
+[datasets.afew]
+task = "with_logits"
+segment = 'segment'
+base_dir = "E:/Databases/9th_ABAW/AFEW/Chunk/"
+csv_path = "{base_dir}/{split}_segment_final_{segment}_with_scene_multimodal_logits.csv"
+
+#[datasets.c_expr_db]
+#task = "with_logits"
+#segment = 'segment'
+#base_dir = "E:/Databases/9th_ABAW/C-EXPR-DB/Chunk/"
+#csv_path = "{base_dir}/{split}_segment_final_{segment}_with_scene_multimodal_logits.csv"
+
+# ---------------------------
+# List of modalities and emotions
+# ---------------------------
+emotion_columns = ["Neutral","Anger","Disgust","Fear","Happiness","Sadness","Surprise","Other"]
+
+
+# ---------------------------
+# DataLoader parameters
+# ---------------------------
+[dataloader]
+num_workers = 0
+shuffle = true
+prepare_only = false
+
+# ---------------------------
+# General training parameters
+# ---------------------------
+[train.general]
+random_seed = 42        # fix random seed for reproducibility (0 = different each time)
+subset_size = 0         # limit on the number of examples (0 = use entire dataset)
+batch_size = 64         # batch size
+num_epochs = 100        # number of training epochs
+max_patience = 25       # maximum number of epochs without improvements (for Early Stopping)
+save_best_model = true
+save_prepared_data = true         # save extracted features (embeddings)
+save_feature_path = './features/' # path for saving embeddings
+search_type = "exhaustive"        # search strategy: "greedy", "exhaustive" or "none"
+opt_set = 'test'                   # dataset for optimizing training parameters
+
+# ---------------------------
+# Model parameters
+# ---------------------------
+[train.model]
+model_name = "ProbabilityFusion"  # model name (ProbabilityFusion)
+combination_number = 0 # from 0 to 56
+number_head_fusion = 3
+
+# ---------------------------
+# Optimizer parameters
+# ---------------------------
+[train.optimizer]
+optimizer = "adam"        # optimizer type: "adam", "adamw", "lion", "sgd", "rmsprop"
+lr = 1e-4                 # initial learning rate
+weight_decay = 0.0        # weight decay for regularization
+momentum = 0.9            # momentum (used only in SGD)
+
+# ---------------------------
+# Scheduler parameters
+# ---------------------------
+[train.scheduler]
+scheduler_type = "plateau" # scheduler type: "none", "plateau", "cosine", "onecycle" or HuggingFace-style ("huggingface_linear", "huggingface_cosine" "huggingface_cosine_with_restarts" etc.)
+warmup_ratio = 0.1         # ratio of warmup iterations to total number of steps (0.1 = 10%)
