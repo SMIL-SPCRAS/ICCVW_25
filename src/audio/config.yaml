@@ -1,0 +1,62 @@
+source_dir: ""
+output_audio_dir: ""
+log_root: ""
+audio_format: "wav"
+sample_rate: 16000
+max_length: 4
+channels: 1
+video_extensions:
+  - .mp4
+  - .avi
+  - .mov
+  - .mkv
+splits:
+  - train
+  - test
+  - dev
+databases:
+  AFEW:
+    train: train_segment.csv
+    dev: dev_segment.csv
+  AffWild2:
+    train: train_segment.csv
+    dev: dev_segment.csv
+    test: test_segment.csv
+  CMU_MOSEI:
+    train: train_segment.csv
+    dev: dev_segment.csv
+    test: test_segment.csv
+  IEMOCAP:
+    train: train_segment.csv
+    dev: dev_segment.csv
+    test: test_segment.csv
+  MELD:
+    train: train_segment.csv
+    dev: dev_segment.csv
+    test: test_segment.csv
+  C-EXPR-DB:
+    test: test_segment.csv
+emotion_labels:
+  - Neutral
+  - Anger
+  - Disgust
+  - Fear
+  - Happiness
+  - Sadness
+  - Surprise
+  - Other
+metrics:
+  - UAR
+  - MacroF1
+pretrained_model: "microsoft/wavlm-base-plus-sd"
+learning_rate: 0.0001
+scheduler_type: "CosineAnnealingLR"
+scheduler_params:
+  T_max: 10    # For CosineAnnealingLR
+batch_size: 32
+num_epochs: 100
+num_workers: 8
+device: "cuda"
+early_stopping_patience: 15
+early_stopping_delta: 0.01
+mlflow_project: "audio-emotion"

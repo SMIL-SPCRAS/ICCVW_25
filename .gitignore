@@ -169,5 +169,10 @@ dmypy.json
 # Custom
 *.pdf
 
-databases/
+# Configuration files
 *.yaml
+!example_config.yaml
+!config.yaml
+mlruns/
+*.code-workspace
+databases/

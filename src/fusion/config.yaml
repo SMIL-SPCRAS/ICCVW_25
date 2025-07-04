@@ -1,0 +1,47 @@
+output_audio_dir: ""
+features_dir: ""
+log_root: ""
+databases:
+  AFEW:
+    train: train_segment.csv
+    dev: dev_segment.csv
+  AffWild2:
+    train: train_segment.csv
+    dev: dev_segment.csv
+  C-EXPR-DB:
+    test: test_segment.csv
+modalities:
+  # audio_8: 256
+  audio_25: 256
+  clip: 512
+  new_scene: 768
+  scene: 1024
+  text: 512
+  video: 128
+  video_static: 512
+emotion_labels:
+  - Neutral
+  - Anger
+  - Disgust
+  - Fear
+  - Happiness
+  - Sadness
+  - Surprise
+  - Other
+metrics:
+  - UAR
+  - MacroF1
+model_name: ""
+learning_rate: 0.001
+scheduler_type: "CosineAnnealingLR"
+scheduler_params:
+  T_max: 10    # For CosineAnnealingLR
+batch_size: 32
+num_epochs: 100
+num_workers: 8
+device: "cuda"
+early_stopping_patience: 20
+early_stopping_delta: 0.001
+mlflow_project: "multimodal-emotion"
+telegram_token: "" # used for notifications via telegram
+telegram_chat_id: "" # used for notifications via telegram
