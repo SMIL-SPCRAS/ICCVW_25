@@ -1,0 +1,38 @@
+model:
+  name: j-hartmann/emotion-english-distilroberta-base
+  layers_freeze: 4
+  num_classes: 8
+
+datasets:
+  train:
+    - csv: ../../databases/AffWild2/train_segment.csv
+    - csv: ../../databases/AFEW/train_segment.csv
+  eval:
+    - csv: ../../databases/AffWild2/dev_full_parakeet.csv
+      ds_label: aff_wild
+    - csv: ../../databases/AFEW/dev_full_parakeet.csv
+      ds_label: afew
+
+training:
+  batch_size: 32
+  epochs: 100
+  lr: 1e-4
+  wd: 1e-4
+  patience: 30
+  seed: 42
+  soft: false
+  classification_mode: "single_label_hard"
+
+inference:
+  model_dir: ./checkpoints/openai_clip-vit-base-patch32
+  csv_path: ../../databases/AffWild2/train_segment_parakeet.csv
+  batch_size: 32
+  threshold: 0.5
+  output: ../../databases/AffWild2/train_segment_parakeet_pred.csv
+
+logging:
+  log_dir: "./logs/"
+  save_path: "./checkpoints/"
+
+data:
+  use_clip_tokenizer: false

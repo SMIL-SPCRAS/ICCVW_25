@@ -7,7 +7,6 @@
 *.o
 *.so
 *.pyc
-
 # Packages #
 ############
 # it's better to unpack these files and commit the raw source
@@ -169,6 +168,14 @@ dmypy.json
 
 # Custom
 *.pdf
+
+# Configuration files
+*.yaml
+!example_config.yaml
+!config.yaml
+mlruns/
+*.code-workspace
+databases/
 corpora/
 main/
 sbatch/

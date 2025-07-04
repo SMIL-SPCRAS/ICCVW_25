@@ -1,6 +1,7 @@
 # ICCVW 2025
 
-## Prompts
+
+## LLMs Info. Prompts
 
 ``1``
 
