@@ -20,4 +20,4 @@ To train text-based emotion recognition models:
 
   - --device / -d: Optional. Device ID for inference: 0, 1, etc. for specific CUDA GPU or -1 to use CPU (default)
 
-- `inference.py` – extract text embeddings and obtain text-based emotion predictions.
+- `inference.py` – extract text embeddings and obtain text-based emotion predictions. Configure inference parameters in `configs/config.yaml`.
